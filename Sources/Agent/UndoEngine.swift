@@ -20,6 +20,8 @@ struct UndoEngine {
     }
 
     let services: DataServices
+    /// Needed only to revert a Reminders export.
+    var reminders: RemindersWriting? = nil
 
     func undoLast(scope: Scope) -> ToolResult {
         guard let last = services.journal.lastUndoable() else {
@@ -95,6 +97,9 @@ struct UndoEngine {
             return step.text == nil ? "the earlier text wasn't recorded." : nil
         case .deleteTask, .deleteProject, .deleteMilestone, .deleteNote, .deleteLink:
             return nil
+        case .removeReminder:
+            if step.text == nil { return "the reminder wasn't recorded." }
+            return reminders == nil ? "Reminders isn't available." : nil
         }
     }
 
@@ -133,6 +138,13 @@ struct UndoEngine {
             }
         case .deleteLink:
             if let link = services.graph.link(id: id) { services.graph.delete(link) }
+        case .removeReminder:
+            // Already deleted in Reminders by the user is fine.
+            if let identifier = step.text { try? reminders?.remove(identifier: identifier) }
+            for export in services.context.fetchAll(ReminderExport.self) where export.taskID == id {
+                services.context.delete(export)
+            }
+            try? services.context.save()
         }
     }
 }

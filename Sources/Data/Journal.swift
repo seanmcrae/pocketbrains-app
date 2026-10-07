@@ -68,6 +68,7 @@ struct InverseStep: Codable, Equatable {
         case deleteNote
         case restoreNoteBody   // undo an append/edit (uses `text`)
         case deleteLink
+        case removeReminder    // delete an exported Reminders item (`text` = its identifier)
     }
 
     var kind: Kind

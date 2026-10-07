@@ -32,6 +32,9 @@ final class ToolBox {
     let semanticIndex: SemanticIndex
     /// Passage index behind "Ask your notes".
     let notesIndex: NotesRAG
+    /// Opt-in EventKit integrations (Calendar read, Reminders export).
+    /// Replaceable so tests can inject mocks.
+    var integrations: Integrations
 
     /// Journal group for the current turn or plan. The orchestrator sets a
     /// fresh value per turn so "undo that" reverts everything the turn did;
@@ -42,6 +45,7 @@ final class ToolBox {
         self.services = services
         self.semanticIndex = semanticIndex
         self.notesIndex = NotesRAG(context: services.context, embedder: semanticIndex)
+        self.integrations = Integrations()
     }
 
     /// Record an inverse for a mutation and return the journal id.
@@ -55,8 +59,9 @@ final class ToolBox {
     // MARK: Tasks
 
     func createTask(title: String, details: String = "", due: String? = nil,
-                    priority: String? = nil, projectName: String? = nil) -> ToolResult {
-        let dueDate = due.flatMap { NaturalDateParser.parse($0) }
+                    priority: String? = nil, projectName: String? = nil,
+                    dueDate exactDue: Date? = nil) -> ToolResult {
+        let dueDate = exactDue ?? due.flatMap { NaturalDateParser.parse($0) }
         let pri = TaskPriority.from(priority)
         let project = projectName.flatMap { services.projects.find(matching: $0) }
         let task = services.tasks.create(
@@ -325,15 +330,103 @@ final class ToolBox {
 
     /// Revert the last turn/plan (`turn`, default) or only the last action (`step`).
     func undo(scope: String? = nil) -> ToolResult {
-        UndoEngine(services: services).undoLast(scope: .from(scope))
+        undoEngine.undoLast(scope: .from(scope))
     }
 
     func undo(entryID: UUID) -> ToolResult {
-        UndoEngine(services: services).undo(entryID: entryID)
+        undoEngine.undo(entryID: entryID)
     }
 
     func undo(group: String) -> ToolResult {
-        UndoEngine(services: services).undo(group: group)
+        undoEngine.undo(group: group)
+    }
+
+    private var undoEngine: UndoEngine {
+        UndoEngine(services: services,
+                   reminders: integrations.settings.remindersEnabled ? integrations.reminders : nil)
+    }
+
+    // MARK: System integrations (opt-in)
+
+    /// Calendar context: events in a window ("this afternoon", "tomorrow"),
+    /// free stretches, and the tasks due that day.
+    func calendarAgenda(window text: String? = nil, now: Date = .now) -> ToolResult {
+        let window = DayWindow.parse(text)
+        guard integrations.calendarReady else {
+            return ToolResult(summary: "Calendar access is off",
+                              detail: "Calendar access is off. Turn it on in Settings → Integrations to include your events.",
+                              succeeded: false)
+        }
+        let interval = window.interval(now: now)
+        let events = integrations.calendar.events(from: interval.start, to: interval.end)
+        let lines = AgendaComposer.describe(events, in: interval)
+        let gaps = AgendaComposer.freeGaps(events, in: interval)
+        let cal = Calendar.current
+        let day = cal.date(byAdding: .day, value: window.dayOffset, to: cal.startOfDay(for: now))!
+        let due = services.tasks.all().filter { $0.dueDate.map { cal.isDate($0, inSameDayAs: day) } ?? false }
+
+        var detail: [String] = []
+        detail.append(lines.isEmpty ? "No events \(window.label)." : "Events \(window.label):\n" + lines.joined(separator: "\n"))
+        if let longest = gaps.max(by: { $0.duration < $1.duration }), !lines.isEmpty {
+            detail.append("Longest free stretch: \(longest.start.formatted(.dateTime.hour().minute()))–\(longest.end.formatted(.dateTime.hour().minute())).")
+        }
+        if !due.isEmpty { detail.append("Tasks due: " + due.map(\.title).joined(separator: "; ")) }
+        let count = lines.count
+        return ToolResult(summary: count == 0 ? "Nothing on your calendar \(window.label)"
+                                               : "\(count) event\(count == 1 ? "" : "s") \(window.label)",
+                          detail: detail.joined(separator: "\n"),
+                          outputs: ["events": String(count)])
+    }
+
+    /// Export tasks to the system Reminders app. `scope`: today | upcoming |
+    /// overdue | all, or words from a task title. Never exports a task twice.
+    func exportToReminders(scope: String? = nil) -> ToolResult {
+        guard integrations.remindersReady else {
+            return ToolResult(summary: "Reminders sync is off",
+                              detail: "Reminders sync is off. Turn it on in Settings → Integrations first.",
+                              succeeded: false)
+        }
+        let filter = (scope ?? "today").trimmingCharacters(in: .whitespaces).lowercased()
+        let tasks: [TaskItem]
+        switch filter {
+        case "", "today", "due": tasks = services.tasks.dueToday()
+        case "upcoming", "this week", "week": tasks = services.tasks.dueWithin(days: 7)
+        case "overdue": tasks = services.tasks.all().filter(\.isOverdue)
+        case "all", "everything": tasks = services.tasks.all()
+        default: tasks = services.tasks.find(matching: filter).map { [$0] } ?? []
+        }
+        let already = Set(services.context.fetchAll(ReminderExport.self).map(\.taskID))
+        let fresh = tasks.filter { !already.contains($0.id) }
+        guard !fresh.isEmpty else {
+            return ToolResult(summary: tasks.isEmpty ? "No tasks to export" : "Already in Reminders",
+                              detail: tasks.isEmpty ? "No tasks matched “\(filter)”."
+                                                    : "Those tasks are already in Reminders.")
+        }
+        var inverse: [InverseStep] = []
+        var exported: [String] = []
+        var failures = 0
+        for task in fresh {
+            do {
+                let identifier = try integrations.reminders.save(ReminderMapper.draft(for: task))
+                services.context.insert(ReminderExport(taskID: task.id, reminderID: identifier))
+                inverse.append(.init(kind: .removeReminder, id: task.id, text: identifier))
+                exported.append(task.title)
+            } catch {
+                failures += 1
+            }
+        }
+        try? services.context.save()
+        guard !exported.isEmpty else {
+            return ToolResult(summary: "Couldn't write to Reminders",
+                              detail: "Reminders refused the export; check that a default list exists.",
+                              succeeded: false)
+        }
+        let summary = "Exported \(exported.count) task\(exported.count == 1 ? "" : "s") to Reminders"
+        let jid = journal("exportToReminders", summary, inverse)
+        var detail = summary + ": " + exported.joined(separator: "; ") + "."
+        if failures > 0 { detail += " \(failures) could not be exported." }
+        return ToolResult(summary: summary, detail: detail, journalID: jid,
+                          outputs: ["count": String(exported.count)])
     }
 
     // MARK: Agenda & recall

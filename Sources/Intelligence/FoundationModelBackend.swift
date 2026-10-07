@@ -155,6 +155,19 @@ final class FoundationModelBackend: ModelBackend {
     // MARK: - Tool bridge
 
     private static func tools(toolbox: ToolBox, sink: ToolEventSink) -> [any Tool] {
+        // Integration tools are offered only once the user opted in: they
+        // cost context, and an unusable tool invites a wasted call.
+        var tools = coreTools(toolbox: toolbox, sink: sink)
+        if toolbox.integrations.settings.calendarEnabled {
+            tools.append(CalendarAgendaTool(toolbox: toolbox, sink: sink))
+        }
+        if toolbox.integrations.settings.remindersEnabled {
+            tools.append(ExportToRemindersTool(toolbox: toolbox, sink: sink))
+        }
+        return tools
+    }
+
+    private static func coreTools(toolbox: ToolBox, sink: ToolEventSink) -> [any Tool] {
         [
             CreateTaskTool(toolbox: toolbox, sink: sink),
             CompleteTaskTool(toolbox: toolbox, sink: sink),
@@ -496,6 +509,44 @@ private struct AskNotesTool: Tool {
     func call(arguments: Arguments) async throws -> String {
         await sink.perform(name, "Reading your notes") {
             toolbox.askNotes(question: arguments.question)
+        }
+    }
+}
+
+private struct CalendarAgendaTool: Tool {
+    let name = "calendarAgenda"
+    let description = "Read the user's calendar for a window: today, this morning, this afternoon, this evening, or tomorrow."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "today, this morning, this afternoon, this evening, or tomorrow")
+        let window: String?
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Reading your calendar") {
+            toolbox.calendarAgenda(window: arguments.window)
+        }
+    }
+}
+
+private struct ExportToRemindersTool: Tool {
+    let name = "exportToReminders"
+    let description = "Copy tasks into Apple Reminders."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "today, upcoming, overdue, all, or words from a task title")
+        let scope: String?
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Exporting to Reminders") {
+            toolbox.exportToReminders(scope: arguments.scope)
         }
     }
 }

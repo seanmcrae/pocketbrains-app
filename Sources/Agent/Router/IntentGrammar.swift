@@ -50,6 +50,22 @@ enum IntentGrammar {
             return ParsedIntent(tool: "askNotes", arguments: ["question": question])
         }
 
+        // Calendar context (opt-in integration)
+        if let window = calendarWindow(lower) {
+            return ParsedIntent(tool: "calendarAgenda", arguments: ["window": window])
+        }
+
+        // Reminders export (opt-in integration)
+        if lower.contains("reminders app") || lower.contains("to reminders") || lower.contains("into reminders")
+            || lower.contains("to apple reminders") {
+            let scope: String
+            if lower.contains("overdue") { scope = "overdue" }
+            else if lower.contains("week") || lower.contains("upcoming") { scope = "upcoming" }
+            else if lower.contains("all ") || lower.contains("everything") || lower.contains("every task") { scope = "all" }
+            else { scope = "today" }
+            return ParsedIntent(tool: "exportToReminders", arguments: ["scope": scope])
+        }
+
         // Agenda
         if lower.contains("agenda") || lower.contains("what's today") || lower.contains("what do i")
             || lower.contains("needs my attention") || (lower.contains("today") && lower.contains("due")) {
@@ -144,6 +160,19 @@ enum IntentGrammar {
         let rest = String(prompt.dropFirst(prefix.count))
             .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
         return rest.isEmpty ? nil : rest
+    }
+
+    /// "what's my afternoon look like", "what's on my calendar tomorrow",
+    /// "any meetings this morning", "my schedule today" → the window phrase.
+    static func calendarWindow(_ lower: String) -> String? {
+        let cues = ["calendar", "meeting", "my schedule", "look like", "looking like",
+                    "am i free", "free time", "events today", "events tomorrow"]
+        guard cues.contains(where: { lower.contains($0) }), !lower.contains("reschedule") else { return nil }
+        var window = lower.contains("tomorrow") ? "tomorrow" : "today"
+        for part in ["morning", "afternoon", "evening", "tonight"] where lower.contains(part) {
+            window = window == "tomorrow" ? "tomorrow \(part)" : "this \(part)"
+        }
+        return window
     }
 
     // MARK: - Helpers

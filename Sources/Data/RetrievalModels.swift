@@ -47,3 +47,18 @@ enum StableHash {
         }
     }
 }
+
+/// A task exported to the system Reminders app, so it is never exported
+/// twice and an undo can remove exactly the reminder it created.
+@Model
+final class ReminderExport {
+    @Attribute(.unique) var taskID: UUID
+    var reminderID: String
+    var exportedAt: Date
+
+    init(taskID: UUID, reminderID: String) {
+        self.taskID = taskID
+        self.reminderID = reminderID
+        self.exportedAt = .now
+    }
+}
