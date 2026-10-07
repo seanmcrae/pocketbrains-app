@@ -70,7 +70,13 @@ enum CompoundPlanner {
                 case "createTask": target = key == "project" ? lastProject : lastEntity
                 default: target = lastTask ?? lastEntity
                 }
-                if let target { args[key] = "$\(target)" }
+                if let target {
+                    args[key] = "$\(target)"
+                } else if !steps.isEmpty {
+                    // "reschedule X and make it urgent": the item the
+                    // previous step acted on.
+                    args[key] = "$last"
+                }
             }
             if let project = lastProject {
                 if intent.tool == "createTask", args["project"] == nil { args["project"] = "$\(project)" }

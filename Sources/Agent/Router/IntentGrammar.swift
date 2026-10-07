@@ -20,17 +20,25 @@ enum IntentGrammar {
     static func parse(_ prompt: String) -> ParsedIntent {
         let lower = prompt.lowercased()
 
+        // v0.2 frames the capture rules below would mis-read.
+        if let early = CommandFrames.beforeCapture(prompt) { return early }
+
         // Reminders / tasks
         if lower.hasPrefix("remind me") || lower.contains("add a task") || lower.contains("add task")
             || lower.hasPrefix("todo") || lower.hasPrefix("i need to") {
             var title = strip(prompt, prefixes: ["remind me to", "remind me", "add a task to", "add a task:", "add task", "todo:", "todo", "i need to"])
             var args: [String: String] = [:]
-            if NaturalDateParser.parse(prompt) != nil {
-                let dueWords = dueText(in: prompt)
-                title = removeSuffix(title, dueWords)
-                args["due"] = dueWords
+            // A repeat rule ("every other Thursday") leaves the title first,
+            // then the one-off date phrase the parser actually used.
+            if let rule = Recurrence.phrase(in: title) {
+                args["repeats"] = rule
+                title = removeSuffix(title, rule)
             }
-            args["title"] = sentenceCase(title)
+            if let date = NaturalDateParser.match(title) {
+                title = removeSuffix(title, date.phrase)
+                args["due"] = date.phrase
+            }
+            args["title"] = sentenceCase(title.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)))
             return ParsedIntent(tool: "createTask", arguments: args)
         }
 
@@ -44,6 +52,9 @@ enum IntentGrammar {
 
         // Undo
         if let undo = parseUndo(lower) { return undo }
+
+        // v0.2 command frames: new tools and common rewordings.
+        if let frame = CommandFrames.commands(prompt) { return frame }
 
         // Ask your notes (cited Q&A) — before the agenda's "what do i…".
         if let question = askNotesQuestion(prompt) {
@@ -133,6 +144,9 @@ enum IntentGrammar {
             return ParsedIntent(tool: "createProject", arguments: ["name": sentenceCase(name)])
         }
 
+        // Lemma-driven fallback before giving up.
+        if let paraphrase = CommandFrames.paraphrase(prompt) { return paraphrase }
+
         // Default: the agenda, with an honest note about the floor mode.
         return ParsedIntent(tool: "agenda", isDefault: true)
     }
@@ -141,7 +155,8 @@ enum IntentGrammar {
     static func parseUndo(_ lower: String) -> ParsedIntent? {
         let trimmed = lower.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
         let starts = ["undo", "revert", "take that back", "take it back", "roll that back",
-                      "roll it back", "roll back", "nevermind, undo", "scratch that"]
+                      "roll it back", "roll back", "nevermind, undo", "never mind, undo",
+                      "never mind undo", "scratch that"]
         guard starts.contains(where: { trimmed == $0 || trimmed.hasPrefix($0 + " ") }) else { return nil }
         let scope = UndoEngine.Scope.from(trimmed)
         return ParsedIntent(tool: "undo", arguments: ["scope": scope.rawValue])
@@ -155,7 +170,8 @@ enum IntentGrammar {
                         "what do my notes tell me about", "ask my notes about", "ask my notes",
                         "according to my notes,", "according to my notes", "do my notes mention",
                         "do my notes say", "what did i write about", "what have i written about",
-                        "what did i note about", "check my notes for", "from my notes,"]
+                        "what did i note about", "check my notes for", "from my notes,",
+                        "what did we decide about", "what did i decide about", "what have we decided about"]
         guard let prefix = prefixes.first(where: { lower.hasPrefix($0) }) else { return nil }
         let rest = String(prompt.dropFirst(prefix.count))
             .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
@@ -188,14 +204,7 @@ enum IntentGrammar {
     /// The date phrase to excise from a task title. Mirrors the phrases
     /// NaturalDateParser understands, so "in 3 days" never leaks into titles.
     static func dueText(in prompt: String) -> String {
-        let lower = prompt.lowercased()
-        if let range = lower.range(of: #"in \d+ days?"#, options: .regularExpression) {
-            return String(lower[range])
-        }
-        let candidates = ["today", "tomorrow", "next week", "monday", "tuesday", "wednesday",
-                          "thursday", "friday", "saturday", "sunday"]
-        for c in candidates where lower.contains(c) { return c }
-        return prompt // NSDataDetector path will find the explicit date
+        NaturalDateParser.match(prompt)?.phrase ?? prompt
     }
 
     static func removeSuffix(_ text: String, _ words: String) -> String {

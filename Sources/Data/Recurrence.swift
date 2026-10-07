@@ -94,6 +94,31 @@ struct Recurrence: Equatable {
 
     // MARK: Parsing
 
+    /// The words that expressed a repeat rule, lowercased, so the router can
+    /// cut them out of a task title ("take out the bins every other
+    /// Thursday" → "take out the bins").
+    static func phrase(in text: String) -> String? {
+        let lower = text.lowercased()
+        let days = "sunday|monday|tuesday|wednesday|thursday|friday|saturday"
+        let parts = #"(?:\s+(?:morning|afternoon|evening|night))?"#
+        let patterns = [
+            #"\bevery (?:other|second) (?:week|"# + days + #")s?\b"# + parts,
+            #"\b(?:bi-?weekly|fortnightly|every fortnight)\b"#,
+            #"\bevery (?:\d+|two|three|four|five|six) (?:days?|weeks?)\b"#,
+            #"\b(?:every|each) (?:weekday|work ?day)\b|\b(?:on )?weekdays\b"#,
+            #"\b(?:every|each) (?:day|morning|evening|night)\b|\b(?:daily|nightly)\b"#,
+            #"\b(?:every|each) week\b|\bweekly\b"#,
+            #"\b(?:every|each) (?:"# + days + #")s?\b"# + parts,
+            #"\b(?:on )?(?:sundays|mondays|tuesdays|wednesdays|thursdays|fridays|saturdays)\b"#,
+        ]
+        for pattern in patterns {
+            if let r = lower.range(of: pattern, options: .regularExpression) {
+                return String(lower[r])
+            }
+        }
+        return nil
+    }
+
     /// "every day", "daily", "every weekday", "weekdays", "weekly",
     /// "every week", "every other Monday", "every 3 days", "every 2 weeks",
     /// "every Monday", "biweekly", "fortnightly". Returns the rule and, for
