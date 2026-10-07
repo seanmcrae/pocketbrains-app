@@ -11,8 +11,22 @@ struct DailyBrief {
     let dueToday: Int
     let blocked: Int
     let doneYesterday: Int
+    /// Opt-in calendar context, e.g. "3 events today · next: Standup at 10:00".
+    var calendarLine: String? = nil
 
     var isQuiet: Bool { overdue + dueToday + blocked == 0 }
+
+    /// Brief with calendar context when the Calendar integration is ready.
+    @MainActor
+    static func compose(services: DataServices, integrations: Integrations) -> DailyBrief {
+        var brief = compose(services: services)
+        if integrations.calendarReady {
+            let today = DayWindow(dayOffset: 0, part: .day).interval(now: Calendar.current.startOfDay(for: .now))
+            let events = integrations.calendar.events(from: today.start, to: today.end)
+            brief.calendarLine = AgendaComposer.briefLine(events)
+        }
+        return brief
+    }
 
     @MainActor
     static func compose(services: DataServices) -> DailyBrief {
