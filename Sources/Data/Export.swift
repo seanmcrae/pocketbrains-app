@@ -6,7 +6,7 @@ enum Exporter {
     struct Payload: Codable {
         var exportedAt: Date
         var app = "PocketBrains"
-        var version = 1
+        var version = 2
         var tasks: [TaskDTO]
         var projects: [ProjectDTO]
         var notes: [NoteDTO]
@@ -17,6 +17,8 @@ enum Exporter {
         var id: UUID, title: String, details: String
         var createdAt: Date, dueDate: Date?, completedAt: Date?
         var priority: String, project: String?, blockedBy: [UUID]
+        /// v2: repeat rule, e.g. "weekly:2"; nil when the task doesn't repeat.
+        var repeats: String? = nil
     }
 
     struct ProjectDTO: Codable {
@@ -46,7 +48,8 @@ enum Exporter {
                 TaskDTO(id: $0.id, title: $0.title, details: $0.details,
                         createdAt: $0.createdAt, dueDate: $0.dueDate,
                         completedAt: $0.completedAt, priority: $0.priority.label,
-                        project: $0.project?.name, blockedBy: $0.blockedByIDs)
+                        project: $0.project?.name, blockedBy: $0.blockedByIDs,
+                        repeats: services.tasks.recurrence(of: $0)?.raw)
             },
             projects: services.projects.all().map { project in
                 ProjectDTO(id: project.id, name: project.name, summary: project.summary,

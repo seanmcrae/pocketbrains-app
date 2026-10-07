@@ -103,6 +103,8 @@ final class AppModel {
         for record in context.fetchAll(EmbeddingRecord.self) { context.delete(record) }
         for chunk in context.fetchAll(NoteChunk.self) { context.delete(chunk) }
         for entry in context.fetchAll(JournalEntry.self) { context.delete(entry) }
+        for rule in context.fetchAll(RecurrenceRule.self) { context.delete(rule) }
+        for export in context.fetchAll(ReminderExport.self) { context.delete(export) }
         for note in context.fetchAll(Note.self) { context.delete(note) }
         for task in context.fetchAll(TaskItem.self) { context.delete(task) }
         for milestone in context.fetchAll(Milestone.self) { context.delete(milestone) }
