@@ -59,6 +59,17 @@ final class AppModel {
     func bootstrap() {
         SeedData.seedIfNeeded(services)
         semanticIndex.reindexAll(notes: services.notes.all())
+        toolbox.notesIndex.sync(notes: services.notes.all())
+    }
+
+    /// Open a cited source note from the thread.
+    func openNote(id: UUID) {
+        guard let note = services.notes.find(id: id) else { return }
+        openSpaces(.knowledge)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450)) // let the zoom settle
+            self.focusedNote = note
+        }
     }
 
     func openSpaces(_ kind: SpaceKind? = nil) {
@@ -80,6 +91,7 @@ final class AppModel {
         UserDefaults.standard.set(false, forKey: "pb.seeded")
         SeedData.seedIfNeeded(services)
         semanticIndex.reindexAll(notes: services.notes.all())
+        toolbox.notesIndex.sync(notes: services.notes.all())
     }
 
     /// Deletes every entity and the conversation. The empty state that
@@ -89,6 +101,8 @@ final class AppModel {
         let context = services.context
         for link in context.fetchAll(KnowledgeLink.self) { context.delete(link) }
         for record in context.fetchAll(EmbeddingRecord.self) { context.delete(record) }
+        for chunk in context.fetchAll(NoteChunk.self) { context.delete(chunk) }
+        for entry in context.fetchAll(JournalEntry.self) { context.delete(entry) }
         for note in context.fetchAll(Note.self) { context.delete(note) }
         for task in context.fetchAll(TaskItem.self) { context.delete(task) }
         for milestone in context.fetchAll(Milestone.self) { context.delete(milestone) }

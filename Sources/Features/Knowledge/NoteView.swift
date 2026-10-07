@@ -137,10 +137,9 @@ struct NoteView: View {
 
     private func saveIfNeeded() {
         guard draft != note.body else { return }
-        note.body = draft
-        note.modifiedAt = .now
-        try? app.services.context.save()
+        app.services.notes.setBody(note, draft)
         app.semanticIndex.index(note: note)
+        app.toolbox.notesIndex.upsert(note)
         // Edits weave new connections automatically.
         app.services.graph.autoWeave(
             note: note,

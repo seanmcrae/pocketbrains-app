@@ -13,7 +13,8 @@ struct MessageRow: View {
             AgentTurn(text: message.text, toolEvents: message.toolEvents,
                       runningTool: nil, isLive: false,
                       isUndone: { app.agent.isUndone($0) },
-                      onUndo: { app.agent.undo($0) })
+                      onUndo: { app.agent.undo($0) },
+                      onOpenNote: { app.openNote(id: $0) })
         }
     }
 }
@@ -72,6 +73,7 @@ struct AgentTurn: View {
     /// Settled turns pass these so cards can offer Undo.
     var isUndone: ((ToolEventRecord) -> Bool)? = nil
     var onUndo: ((ToolEventRecord) -> Void)? = nil
+    var onOpenNote: ((UUID) -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: Space.s) {
@@ -95,6 +97,9 @@ struct AgentTurn: View {
                                          isRunning: isLive && event.toolName == runningTool && event.detail.isEmpty,
                                          isUndone: undoable ? (isUndone?(event) ?? false) : false,
                                          onUndo: undoable ? undoAction(for: event) : nil)
+                        if let citations = event.citations, !citations.isEmpty {
+                            CitationRail(citations: citations, onOpen: onOpenNote)
+                        }
                     }
                 }
                 if !text.isEmpty {
@@ -181,6 +186,7 @@ struct ToolActivityCard: View {
         case "createProject", "projectStatus", "addMilestone": "square.stack"
         case "createNote", "appendNote": "square.and.pencil"
         case "searchNotes", "notesFrom": "magnifyingglass"
+        case "askNotes": "text.quote"
         case "linkItems": "link"
         case "recall": "clock.arrow.circlepath"
         case "undo": "arrow.uturn.backward"
@@ -193,7 +199,7 @@ struct ToolActivityCard: View {
         switch tool {
         case "createTask", "updateTask", "completeTask", "queryTasks", "agenda": DomainHue.task
         case "createProject", "projectStatus", "addMilestone": lumen
-        case "createNote", "appendNote", "searchNotes", "notesFrom": DomainHue.note
+        case "createNote", "appendNote", "searchNotes", "notesFrom", "askNotes": DomainHue.note
         case "linkItems", "recall": DomainHue.knowledge
         default: lumen
         }
@@ -266,5 +272,42 @@ struct PlanCard: View {
         .glass(Radius.control, tint: lumen, depth: 0.45)
         .frame(maxWidth: 340, alignment: .leading)
         .transition(.scale(scale: 0.9, anchor: .leading).combined(with: .opacity))
+    }
+}
+
+/// The sources behind a cited answer: one chip per [n], tap to open the note.
+struct CitationRail: View {
+    let citations: [Citation]
+    var onOpen: ((UUID) -> Void)? = nil
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Space.xs) {
+                ForEach(citations) { citation in
+                    Button {
+                        Haptics.touch()
+                        onOpen?(citation.noteID)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("\(citation.index)")
+                                .font(Type.micro)
+                                .monospacedDigit()
+                                .foregroundStyle(DomainHue.note)
+                            Text(citation.title)
+                                .font(Type.caption)
+                                .foregroundStyle(Paper.secondary)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, Space.s)
+                        .padding(.vertical, 4)
+                        .glass(Radius.control, tint: DomainHue.note, depth: 0.3)
+                    }
+                    .buttonStyle(GlassPressStyle())
+                    .disabled(onOpen == nil)
+                    .accessibilityLabel("Source \(citation.index): \(citation.title)")
+                }
+            }
+        }
+        .frame(maxWidth: 340, alignment: .leading)
     }
 }
