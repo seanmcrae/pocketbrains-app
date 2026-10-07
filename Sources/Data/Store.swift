@@ -10,7 +10,7 @@ enum Store {
         Schema([
             TaskItem.self, Project.self, Milestone.self, Note.self,
             KnowledgeLink.self, ChatMessage.self, EmbeddingRecord.self,
-            JournalEntry.self, NoteChunk.self, ReminderExport.self,
+            JournalEntry.self, NoteChunk.self, ReminderExport.self, RecurrenceRule.self,
         ])
     }
 

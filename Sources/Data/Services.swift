@@ -40,11 +40,52 @@ struct TaskService {
         return task
     }
 
-    func complete(_ task: TaskItem) {
+    /// Marks the task done. A recurring task spawns its next occurrence
+    /// (same title, details, priority and project), and the repeat rule moves
+    /// to it. Returns the spawned task, if any.
+    @discardableResult
+    func complete(_ task: TaskItem) -> TaskItem? {
         task.completedAt = .now
+        var spawned: TaskItem?
+        if let ruleRow = recurrenceRow(for: task.id), let rule = ruleRow.rule {
+            let next = TaskItem(title: task.title, details: task.details,
+                                dueDate: rule.nextOccurrence(afterCompleting: task.dueDate),
+                                priority: task.priority, project: task.project)
+            context.insert(next)
+            ruleRow.taskID = next.id
+            spawned = next
+        }
         try? context.save()
         NotificationPlanner.sync(tasks: all())
         WidgetPublisher.publish(services: DataServices(context: context))
+        return spawned
+    }
+
+    // MARK: Recurrence
+
+    func recurrenceRow(for taskID: UUID) -> RecurrenceRule? {
+        context.fetchAll(RecurrenceRule.self).first { $0.taskID == taskID }
+    }
+
+    func recurrence(of task: TaskItem) -> Recurrence? {
+        recurrenceRow(for: task.id)?.rule
+    }
+
+    /// Set (or with nil, clear) a task's repeat rule.
+    func setRecurrence(_ task: TaskItem, _ rule: Recurrence?) {
+        if let row = recurrenceRow(for: task.id) {
+            if let rule { row.ruleRaw = rule.raw } else { context.delete(row) }
+        } else if let rule {
+            context.insert(RecurrenceRule(taskID: task.id, rule: rule))
+        }
+        try? context.save()
+    }
+
+    /// Move a repeat rule from one task to another (undo of a completion).
+    func moveRecurrence(from source: UUID, to target: UUID) {
+        guard let row = recurrenceRow(for: source) else { return }
+        row.taskID = target
+        try? context.save()
     }
 
     func reopen(_ task: TaskItem) {
@@ -67,6 +108,7 @@ struct TaskService {
     }
 
     func delete(_ task: TaskItem) {
+        if let row = recurrenceRow(for: task.id) { context.delete(row) }
         context.delete(task)
         try? context.save()
         NotificationPlanner.sync(tasks: all())
@@ -88,8 +130,12 @@ struct TaskService {
         if let id = EntityRef.id(from: query) { return find(id: id) }
         let q = query.lowercased()
         guard !q.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        return all(includeDone: true)
-            .first { $0.title.lowercased().contains(q) || q.contains($0.title.lowercased()) }
+        let candidates = all(includeDone: true)
+        if let exact = candidates.first(where: { $0.title.lowercased().contains(q) || q.contains($0.title.lowercased()) }) {
+            return exact
+        }
+        return FuzzyMatch.best(query, in: candidates.filter { !$0.isDone }, title: \.title)
+            ?? FuzzyMatch.best(query, in: candidates, title: \.title)
     }
 
     func find(id: UUID) -> TaskItem? {
@@ -148,7 +194,11 @@ struct ProjectService {
         if let id = EntityRef.id(from: query) { return find(id: id) }
         let q = query.lowercased()
         guard !q.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        return all().first { $0.name.lowercased().contains(q) || q.contains($0.name.lowercased()) }
+        let projects = all()
+        if let exact = projects.first(where: { $0.name.lowercased().contains(q) || q.contains($0.name.lowercased()) }) {
+            return exact
+        }
+        return FuzzyMatch.best(query, in: projects, title: \.name)
     }
 
     @discardableResult
@@ -390,5 +440,37 @@ struct JournalService {
         let now = Date.now
         for entry in entries { entry.undoneAt = now }
         try? context.save()
+    }
+}
+
+
+// MARK: - Fuzzy title matching
+
+/// Token-overlap fallback for "the launch copy" → "Write launch copy" when
+/// no title contains the query verbatim. Content words are stemmed and
+/// stopwords dropped; a candidate must cover every query word (or, for
+/// queries of 3+ words, all but one) to qualify, so near-misses don't
+/// silently act on the wrong task.
+enum FuzzyMatch {
+    static let filler: Set<String> = ["task", "todo", "item", "thing", "project", "list", "one"]
+
+    static func words(_ text: String) -> Set<String> {
+        Set(TextTokens.tokenize(text).filter { !filler.contains($0) })
+    }
+
+    static func best<T>(_ query: String, in items: [T], title: KeyPath<T, String>) -> T? {
+        let q = words(query)
+        guard !q.isEmpty else { return nil }
+        let needed = q.count >= 3 ? q.count - 1 : q.count
+        var bestItem: T?
+        var bestScore = 0.0
+        for item in items {
+            let t = words(item[keyPath: title])
+            let hits = q.intersection(t).count
+            guard hits >= needed, !t.isEmpty else { continue }
+            let score = Double(hits) / Double(q.union(t).count)
+            if score > bestScore { bestScore = score; bestItem = item }
+        }
+        return bestItem
     }
 }

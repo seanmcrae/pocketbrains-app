@@ -69,6 +69,9 @@ struct InverseStep: Codable, Equatable {
         case restoreNoteBody   // undo an append/edit (uses `text`)
         case deleteLink
         case removeReminder    // delete an exported Reminders item (`text` = its identifier)
+        case setRecurrence     // put a repeat rule back (`text` = Recurrence.raw)
+        case clearRecurrence   // remove a repeat rule the action added
+        case moveRecurrence    // move the rule back to `id` from the task in `text`
     }
 
     var kind: Kind
