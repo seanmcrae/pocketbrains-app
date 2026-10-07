@@ -100,6 +100,8 @@ struct UndoEngine {
         case .removeReminder:
             if step.text == nil { return "the reminder wasn't recorded." }
             return reminders == nil ? "Reminders isn't available." : nil
+        case .setRecurrence, .clearRecurrence, .moveRecurrence:
+            return services.tasks.find(id: id) == nil ? "that task no longer exists." : nil
         }
     }
 
@@ -145,6 +147,16 @@ struct UndoEngine {
                 services.context.delete(export)
             }
             try? services.context.save()
+        case .setRecurrence:
+            if let task = services.tasks.find(id: id) {
+                services.tasks.setRecurrence(task, step.text.flatMap { Recurrence(raw: $0) })
+            }
+        case .clearRecurrence:
+            if let task = services.tasks.find(id: id) { services.tasks.setRecurrence(task, nil) }
+        case .moveRecurrence:
+            if let source = step.text.flatMap({ UUID(uuidString: $0) }) {
+                services.tasks.moveRecurrence(from: source, to: id)
+            }
         }
     }
 }

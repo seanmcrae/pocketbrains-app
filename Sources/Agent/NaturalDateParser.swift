@@ -37,6 +37,29 @@ enum NaturalDateParser {
         return nil
     }
 
+    /// Next occurrence of a weekday (1 = Sunday) strictly after `reference`'s day.
+    static func nextWeekday(_ weekday: Int, from reference: Date = .now) -> Date {
+        let cal = Calendar.current
+        var date = cal.startOfDay(for: reference)
+        for _ in 0..<8 {
+            date = cal.date(byAdding: .day, value: 1, to: date)!
+            if cal.component(.weekday, from: date) == weekday { return date }
+        }
+        return date
+    }
+
+    /// "2 days", "a week", "three weeks" → whole days.
+    static func days(in text: String) -> Int? {
+        let lower = text.lowercased()
+        let words: [String: Int] = ["a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4,
+                                    "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10]
+        guard let r = lower.range(of: #"(\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten) (days?|weeks?)"#,
+                                  options: .regularExpression) else { return nil }
+        let parts = lower[r].split(separator: " ").map(String.init)
+        guard let n = Int(parts[0]) ?? words[parts[0]] else { return nil }
+        return parts[1].hasPrefix("week") ? 7 * n : n
+    }
+
     /// Human phrasing for the UI: "Today", "Tomorrow", "Friday", "Jun 24".
     static func describe(_ date: Date) -> String {
         let cal = Calendar.current

@@ -60,8 +60,15 @@ final class ToolBox {
 
     func createTask(title: String, details: String = "", due: String? = nil,
                     priority: String? = nil, projectName: String? = nil,
-                    dueDate exactDue: Date? = nil) -> ToolResult {
-        let dueDate = exactDue ?? due.flatMap { NaturalDateParser.parse($0) }
+                    dueDate exactDue: Date? = nil, repeats: String? = nil) -> ToolResult {
+        let rule = repeats.flatMap { Recurrence.parse($0) }
+        var dueDate = exactDue ?? due.flatMap { NaturalDateParser.parse($0) }
+        if dueDate == nil, let rule {
+            // First occurrence: the anchored weekday ("every other Monday"),
+            // otherwise today.
+            dueDate = rule.anchorWeekday.map { NaturalDateParser.nextWeekday($0) }
+                ?? Calendar.current.startOfDay(for: .now)
+        }
         let pri = TaskPriority.from(priority)
         let project = projectName.flatMap { services.projects.find(matching: $0) }
         let task = services.tasks.create(
@@ -70,6 +77,10 @@ final class ToolBox {
         if let dueDate { bits.append("due \(NaturalDateParser.describe(dueDate))") }
         if let project { bits.append("in \(project.name)") }
         else if let projectName, !projectName.isEmpty { bits.append("unfiled (no project “\(projectName)”)") }
+        if let rule {
+            services.tasks.setRecurrence(task, rule.rule)
+            bits.append("repeats \(rule.rule.label)")
+        }
         let summary = bits.joined(separator: ", ")
         let jid = journal("createTask", summary, [.init(kind: .deleteTask, id: task.id)])
         return ToolResult(summary: summary, detail: summary + ".", journalID: jid,
@@ -86,9 +97,16 @@ final class ToolBox {
                               detail: "“\(task.title)” was already marked done.",
                               outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
         }
-        services.tasks.complete(task)
-        let summary = "Completed “\(task.title)”"
-        let jid = journal("completeTask", summary, [.init(kind: .reopenTask, id: task.id)])
+        let spawned = services.tasks.complete(task)
+        var summary = "Completed “\(task.title)”"
+        var inverse: [InverseStep] = []
+        if let spawned {
+            if let next = spawned.dueDate { summary += " · next one \(NaturalDateParser.describe(next))" }
+            inverse.append(.init(kind: .moveRecurrence, id: task.id, text: spawned.id.uuidString))
+            inverse.append(.init(kind: .deleteTask, id: spawned.id))
+        }
+        inverse.append(.init(kind: .reopenTask, id: task.id))
+        let jid = journal("completeTask", summary, inverse)
         return ToolResult(summary: summary,
                           detail: "Marked “\(task.title)” as done.", journalID: jid,
                           outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
@@ -148,6 +166,109 @@ final class ToolBox {
                           detail: lines.joined(separator: "\n"))
     }
 
+    /// Move a task's due date: to an absolute date ("Friday", "next Tues")
+    /// or by a relative shift ("2 days", "a week") from its current due date.
+    func rescheduleTask(query: String, to: String? = nil, by: String? = nil) -> ToolResult {
+        guard let task = services.tasks.find(matching: query) else {
+            return ToolResult(summary: "No task matching “\(query)”",
+                              detail: "No task found matching “\(query)”.", succeeded: false)
+        }
+        let cal = Calendar.current
+        var newDate: Date?
+        if let to, !to.isEmpty { newDate = NaturalDateParser.parse(to) }
+        if newDate == nil, let by, let days = NaturalDateParser.days(in: by) {
+            let base = task.dueDate.map { cal.startOfDay(for: $0) } ?? cal.startOfDay(for: .now)
+            newDate = cal.date(byAdding: .day, value: days, to: base)
+        }
+        guard let newDate else {
+            return ToolResult(summary: "Couldn't read the new date",
+                              detail: "I couldn't tell when to move “\(task.title)” to.", succeeded: false)
+        }
+        return changeDue(task, to: newDate, tool: "rescheduleTask", verb: "Moved")
+    }
+
+    /// Hide a task until later: "tomorrow" by default, "2 days", "a week",
+    /// or "until Monday". Counted from today, not from the old due date.
+    func snoozeTask(query: String, until: String? = nil) -> ToolResult {
+        guard let task = services.tasks.find(matching: query) else {
+            return ToolResult(summary: "No task matching “\(query)”",
+                              detail: "No task found matching “\(query)”.", succeeded: false)
+        }
+        let text = (until ?? "").trimmingCharacters(in: .whitespaces)
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: .now)
+        let date: Date?
+        if text.isEmpty {
+            date = cal.date(byAdding: .day, value: 1, to: today)
+        } else if let days = NaturalDateParser.days(in: text), !text.lowercased().contains("until") {
+            date = cal.date(byAdding: .day, value: days, to: today)
+        } else {
+            date = NaturalDateParser.parse(text)
+        }
+        guard let date else {
+            return ToolResult(summary: "Couldn't read how long to snooze",
+                              detail: "I couldn't tell how long to snooze “\(task.title)”.", succeeded: false)
+        }
+        return changeDue(task, to: date, tool: "snoozeTask", verb: "Snoozed")
+    }
+
+    private func changeDue(_ task: TaskItem, to date: Date, tool: String, verb: String) -> ToolResult {
+        let before = TaskSnapshot(task)
+        services.tasks.update(task, due: .some(date))
+        let summary = "\(verb) “\(task.title)” to \(NaturalDateParser.describe(date))"
+        let jid = journal(tool, summary, [.init(kind: .restoreTask, id: task.id, task: before)])
+        return ToolResult(summary: summary, detail: summary + ".", journalID: jid,
+                          outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
+    }
+
+    func setPriority(query: String, priority: String) -> ToolResult {
+        guard let task = services.tasks.find(matching: query) else {
+            return ToolResult(summary: "No task matching “\(query)”",
+                              detail: "No task found matching “\(query)”.", succeeded: false)
+        }
+        guard let level = TaskPriority.parse(priority) else {
+            return ToolResult(summary: "Unknown priority “\(priority)”",
+                              detail: "Priority must be low, normal, high or urgent.", succeeded: false)
+        }
+        let before = TaskSnapshot(task)
+        services.tasks.update(task, priority: level)
+        let summary = "“\(task.title)” is now \(level.label.lowercased()) priority"
+        let jid = journal("setPriority", summary, [.init(kind: .restoreTask, id: task.id, task: before)])
+        return ToolResult(summary: summary, detail: summary + ".", journalID: jid,
+                          outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
+    }
+
+    /// Make a task repeat ("every weekday", "every other Monday", "every
+    /// 3 days"), or stop it repeating ("never", "none", "stop").
+    func setRecurrence(query: String, rule text: String) -> ToolResult {
+        guard let task = services.tasks.find(matching: query) else {
+            return ToolResult(summary: "No task matching “\(query)”",
+                              detail: "No task found matching “\(query)”.", succeeded: false)
+        }
+        let previous = services.tasks.recurrence(of: task)
+        let stop = ["none", "never", "stop", "no", "off", "don't repeat", "not"].contains {
+            text.lowercased().trimmingCharacters(in: .whitespaces) == $0 || text.lowercased().hasPrefix("stop")
+        }
+        let parsed = Recurrence.parse(text)
+        guard stop || parsed != nil else {
+            return ToolResult(summary: "Couldn't read the repeat rule",
+                              detail: "Try daily, weekdays, weekly, every other Monday or every 3 days.",
+                              succeeded: false)
+        }
+        services.tasks.setRecurrence(task, stop ? nil : parsed?.rule)
+        if task.dueDate == nil, let parsed {
+            services.tasks.update(task, due: .some(parsed.anchorWeekday.map { NaturalDateParser.nextWeekday($0) }
+                ?? Calendar.current.startOfDay(for: .now)))
+        }
+        let summary = stop ? "“\(task.title)” no longer repeats"
+                           : "“\(task.title)” repeats \(parsed!.rule.label)"
+        let undoRule: InverseStep = previous.map { .init(kind: .setRecurrence, id: task.id, text: $0.raw) }
+            ?? .init(kind: .clearRecurrence, id: task.id)
+        let jid = journal("setRecurrence", summary, [undoRule])
+        return ToolResult(summary: summary, detail: summary + ".", journalID: jid,
+                          outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
+    }
+
     // MARK: Projects
 
     func createProject(name: String, summary: String = "") -> ToolResult {
@@ -198,6 +319,26 @@ final class ToolBox {
         let jid = journal("addMilestone", line, [.init(kind: .deleteMilestone, id: milestone.id)])
         return ToolResult(summary: line, detail: line + ".", journalID: jid,
                           outputs: ["ref": EntityRef.make(milestone.id), "kind": "milestone", "title": title])
+    }
+
+    func listMilestones(projectName: String) -> ToolResult {
+        guard let project = services.projects.find(matching: projectName) else {
+            return ToolResult(summary: "No project matching “\(projectName)”",
+                              detail: "No project found matching “\(projectName)”.", succeeded: false)
+        }
+        let milestones = services.projects.milestones(of: project)
+        guard !milestones.isEmpty else {
+            return ToolResult(summary: "\(project.name) has no milestones",
+                              detail: "\(project.name) has no milestones yet.")
+        }
+        let lines = milestones.map { m -> String in
+            var line = "• \(m.title)"
+            if let t = m.targetDate { line += " (\(NaturalDateParser.describe(t)))" }
+            if m.isReached { line += " ✓ reached" }
+            return line
+        }
+        return ToolResult(summary: "\(milestones.count) milestone\(milestones.count == 1 ? "" : "s") in \(project.name)",
+                          detail: "\(project.name) milestones:\n" + lines.joined(separator: "\n"))
     }
 
     // MARK: Notes
@@ -291,6 +432,21 @@ final class ToolBox {
         let lines = notes.map { "• \($0.title):\n\($0.body)" }
         return ToolResult(summary: "\(notes.count) note\(notes.count == 1 ? "" : "s") from \(dayDescription)",
                           detail: lines.joined(separator: "\n\n"))
+    }
+
+    /// One query across tasks, projects and notes (keyword + semantic).
+    func searchEverything(query: String) -> ToolResult {
+        let found = SearchEngine.search(query, services: services, index: semanticIndex)
+        guard !found.isEmpty else {
+            return ToolResult(summary: "Nothing found", detail: "Nothing matches “\(query)”.")
+        }
+        var lines: [String] = []
+        lines += found.tasks.map { "Task: \($0.title)\($0.isDone ? " (done)" : "")" }
+        lines += found.projects.map { "Project: \($0.name)" }
+        lines += found.notes.map { "Note: \($0.title)" }
+        let count = found.tasks.count + found.projects.count + found.notes.count
+        return ToolResult(summary: "\(count) match\(count == 1 ? "" : "es") across your library",
+                          detail: lines.joined(separator: "\n"))
     }
 
     // MARK: Knowledge
@@ -474,6 +630,16 @@ final class ToolBox {
 }
 
 extension TaskPriority {
+    /// Strict parse for setPriority: nil when the word isn't a priority.
+    static func parse(_ string: String) -> TaskPriority? {
+        let lower = string.lowercased()
+        if lower.contains("urgent") || lower.contains("critical") || lower.contains("asap") || lower.contains("top") { return .urgent }
+        if lower.contains("high") || lower.contains("important") { return .high }
+        if lower.contains("low") || lower.contains("someday") || lower.contains("minor") { return .low }
+        if lower.contains("normal") || lower.contains("medium") || lower.contains("default") { return .normal }
+        return nil
+    }
+
     static func from(_ string: String?) -> TaskPriority {
         switch string?.lowercased() {
         case "low": .low
