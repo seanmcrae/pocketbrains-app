@@ -33,12 +33,24 @@ final class FoundationModelBackend: ModelBackend {
     func reply(to prompt: String) -> AsyncThrowingStream<AgentEvent, Error> {
         AsyncThrowingStream { continuation in
             sink.emit = { continuation.yield($0) }
+            sink.resetStepCount()
             let task = Task { @MainActor in
                 do {
+                    // Compound requests: plan first (guided generation), then
+                    // execute deterministically with argument passing,
+                    // postconditions and atomic undo. Simple requests use the
+                    // model's native multi-turn tool calling.
+                    if CompoundPlanner.split(prompt).count > 1,
+                       let outcome = await self.runPlanned(prompt, continuation: continuation) {
+                        let text = await self.narrate(outcome, prompt: prompt, continuation: continuation)
+                        continuation.yield(.done(finalText: text))
+                        continuation.finish()
+                        return
+                    }
                     var lastText = ""
                     let stream = session.streamResponse(to: prompt)
                     for try await partial in stream {
-                        lastText = String(describing: partial)
+                        lastText = partial.content
                         continuation.yield(.text(lastText))
                     }
                     continuation.yield(.done(finalText: lastText))
@@ -51,6 +63,92 @@ final class FoundationModelBackend: ModelBackend {
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    // MARK: - Planning
+
+    /// Ask the model for a structured plan; fall back to the deterministic
+    /// planner when generation fails or names unknown tools. Returns nil when
+    /// neither produces a plan of two or more steps.
+    private func runPlanned(_ prompt: String,
+                            continuation: AsyncThrowingStream<AgentEvent, Error>.Continuation) async -> PlanExecutor.Outcome? {
+        var plan: AgentPlan?
+        do {
+            plan = try await generatePlan(for: prompt)
+        } catch {
+            plan = nil
+        }
+        if plan == nil { plan = CompoundPlanner.plan(prompt) }
+        guard let plan else { return nil }
+        let outcome = PlanExecutor(toolbox: toolbox).execute(plan)
+        for event in outcome.events {
+            continuation.yield(event)
+            try? await Task.sleep(for: .milliseconds(120))
+        }
+        return outcome
+    }
+
+    private func generatePlan(for prompt: String) async throws -> AgentPlan? {
+        let specs = AgentToolRegistry.all(toolbox: toolbox)
+        let names = Set(specs.map(\.name))
+        let planner = LanguageModelSession(instructions: Self.plannerInstructions(specs: specs))
+        let response = try await planner.respond(to: prompt, generating: GeneratedPlan.self)
+        var steps: [PlanStep] = []
+        for step in response.content.steps {
+            guard names.contains(step.tool) else { return nil } // unknown tool: don't guess
+            var arguments: [String: String] = [:]
+            for argument in step.arguments where !argument.value.isEmpty {
+                arguments[argument.name] = argument.value
+            }
+            steps.append(PlanStep(tool: step.tool, arguments: arguments))
+        }
+        guard steps.count >= 2 else { return nil }
+        return AgentPlan(goal: prompt, steps: steps)
+    }
+
+    private static func plannerInstructions(specs: [AgentToolSpec]) -> String {
+        let catalog = specs.map { spec in
+            let params = spec.parameters.map { "\($0.name)\($0.required ? "*" : "")" }
+                .joined(separator: ", ")
+            return "- \(spec.name)(\(params)): \(spec.description)"
+        }.joined(separator: "\n")
+        return """
+        You turn one request into an ordered list of tool calls for a personal \
+        workspace app. Use only these tools (* = required argument):
+        \(catalog)
+
+        Rules: one step per action, in the order the user said them. To refer \
+        to something an earlier step creates, use $N for step N (for example \
+        project: "$1"). Use natural-language dates ("Friday"). Never invent \
+        tools or arguments.
+        """
+    }
+
+    /// One short, model-written sentence about what the plan did. Uses a
+    /// tool-less session so narration can never trigger a second execution.
+    private func narrate(_ outcome: PlanExecutor.Outcome, prompt: String,
+                         continuation: AsyncThrowingStream<AgentEvent, Error>.Continuation) async -> String {
+        let narrator = LanguageModelSession(instructions: AgentVoice.instructions())
+        let facts = outcome.steps.enumerated().map { index, step in
+            "\(index + 1). \(step.result?.detail ?? "skipped")"
+        }.joined(separator: "\n")
+        let request = """
+        The user asked: "\(prompt)". These steps ran:
+        \(facts)
+        \(outcome.succeeded ? "Everything succeeded." : "The plan stopped early: \(outcome.message)")
+        Tell the user what happened in one or two sentences. Mention they can say "undo that".
+        """
+        do {
+            var text = ""
+            for try await partial in narrator.streamResponse(to: request) {
+                text = partial.content
+                continuation.yield(.text(text))
+            }
+            return text.isEmpty ? outcome.message : text
+        } catch {
+            continuation.yield(.text(outcome.message))
+            return outcome.message
         }
     }
 
@@ -71,6 +169,7 @@ final class FoundationModelBackend: ModelBackend {
             LinkItemsTool(toolbox: toolbox, sink: sink),
             AgendaTool(toolbox: toolbox, sink: sink),
             RecallTool(toolbox: toolbox, sink: sink),
+            UndoTool(toolbox: toolbox, sink: sink),
         ]
     }
 }
@@ -80,14 +179,45 @@ final class FoundationModelBackend: ModelBackend {
 @MainActor
 final class ToolEventSink {
     var emit: ((AgentEvent) -> Void)?
+    /// Native multi-turn tool calls within one reply are numbered as steps.
+    private var stepCount = 0
+
+    func resetStepCount() { stepCount = 0 }
 
     func perform(_ name: String, _ activity: String,
                  _ op: @MainActor () -> ToolResult) -> String {
+        stepCount += 1
         emit?(.toolStarted(name: name, summary: activity))
         let result = op()
-        emit?(.toolFinished(result.record(toolName: name)))
+        var record = result.record(toolName: name)
+        if stepCount > 1 { record.stepLabel = "#\(stepCount)" }
+        emit?(.toolFinished(record))
         return result.detail
     }
+}
+
+// MARK: - Guided plan generation
+
+@Generable
+struct GeneratedPlan {
+    @Guide(description: "The tool calls to make, in order")
+    let steps: [GeneratedStep]
+}
+
+@Generable
+struct GeneratedStep {
+    @Guide(description: "Exact tool name from the list")
+    let tool: String
+    @Guide(description: "Arguments for the tool")
+    let arguments: [GeneratedArgument]
+}
+
+@Generable
+struct GeneratedArgument {
+    @Guide(description: "Argument name")
+    let name: String
+    @Guide(description: "Argument value; use $N to refer to what step N created")
+    let value: String
 }
 
 // MARK: - Tool conformances
@@ -346,6 +476,25 @@ private struct AgendaTool: Tool {
     func call(arguments: Arguments) async throws -> String {
         await sink.perform(name, "Composing agenda") {
             toolbox.agenda()
+        }
+    }
+}
+
+private struct UndoTool: Tool {
+    let name = "undo"
+    let description = "Undo the last change: the whole last request (turn) or only the last action (step)."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "turn or step")
+        let scope: String?
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Undoing") {
+            toolbox.undo(scope: arguments.scope)
         }
     }
 }
