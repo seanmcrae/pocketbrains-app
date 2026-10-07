@@ -1,4 +1,5 @@
 import Foundation
+@testable import PocketBrains
 
 /// SYNTHETIC evaluation corpus for the deterministic intent router (the
 /// fallback brain). Every utterance was written for this eval; none comes
@@ -43,7 +44,8 @@ struct IntentEvalCase {
     /// Fixture task whose state the request changes, and what it must become.
     var target: String? = nil
     var targetDue: Due? = nil
-    var targetPriority: TaskPriority? = nil
+    /// Qualified: Swift Concurrency also declares a `TaskPriority`.
+    var targetPriority: PocketBrains.TaskPriority? = nil
     /// `Recurrence.raw`, or "none" for no rule.
     var targetRepeats: String? = nil
     /// Compound requests: the exact tool sequence.
