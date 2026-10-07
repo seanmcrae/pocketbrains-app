@@ -2,8 +2,9 @@ import Foundation
 
 /// Deterministic floor: a rule-based intent parser that drives the same
 /// ToolBox. No generation, but "remind me to send the invoice Friday" still
-/// creates the task. Guarantees the product works on any device, simulator
-/// included, with zero model assets.
+/// creates the task, and "create a project Launch, add 3 tasks for Friday and
+/// link it to brand voice" still runs as a five-step plan. Guarantees the
+/// product works on any device, simulator included, with zero model assets.
 @MainActor
 final class IntentFallbackBackend: ModelBackend {
     let displayName = "Quick intents · offline"
@@ -19,183 +20,112 @@ final class IntentFallbackBackend: ModelBackend {
     func reply(to prompt: String) -> AsyncThrowingStream<AgentEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task { @MainActor in
-                let (toolName, activity, result, reply) = Self.routeIntent(prompt, toolbox: toolbox)
-                if let toolName, let result {
-                    continuation.yield(.toolStarted(name: toolName, summary: activity))
-                    try? await Task.sleep(for: .milliseconds(350)) // let the card breathe
-                    continuation.yield(.toolFinished(result.record(toolName: toolName)))
+                let turn = Self.routeTurn(prompt, toolbox: toolbox)
+                for event in turn.events {
+                    continuation.yield(event)
+                    // Let each card breathe; a tool's own start→finish gets the longest beat.
+                    if case .toolStarted = event {
+                        try? await Task.sleep(for: .milliseconds(350))
+                    } else {
+                        try? await Task.sleep(for: .milliseconds(120))
+                    }
                 }
                 // Stream the reply in word chunks so the condensation reveal
                 // behaves identically to a real model.
                 var shown = ""
-                for word in reply.split(separator: " ", omittingEmptySubsequences: false) {
+                for word in turn.reply.split(separator: " ", omittingEmptySubsequences: false) {
                     shown += (shown.isEmpty ? "" : " ") + word
                     continuation.yield(.text(shown))
                     try? await Task.sleep(for: .milliseconds(24))
                 }
-                continuation.yield(.done(finalText: reply))
+                continuation.yield(.done(finalText: turn.reply))
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
 
-    // MARK: - Routing
+    // MARK: - Turns
 
-    @MainActor
+    struct Turn {
+        /// Tools that ran, in order.
+        var tools: [String]
+        var results: [ToolResult]
+        var events: [AgentEvent]
+        var reply: String
+        /// Set when the request ran as a multi-step plan.
+        var plan: PlanExecutor.Outcome?
+    }
+
+    /// Route a whole request: a compound one becomes a plan, anything else a
+    /// single intent. Internal so tests and the eval can drive it directly.
+    static func routeTurn(_ prompt: String, toolbox: ToolBox) -> Turn {
+        if let plan = CompoundPlanner.plan(prompt) {
+            let outcome = PlanExecutor(toolbox: toolbox).execute(plan)
+            return Turn(tools: outcome.executedTools,
+                        results: outcome.steps.compactMap(\.result),
+                        events: outcome.events, reply: outcome.message, plan: outcome)
+        }
+        let routed = routeIntent(prompt, toolbox: toolbox)
+        var events: [AgentEvent] = []
+        if let tool = routed.tool, let result = routed.result {
+            events.append(.toolStarted(name: tool, summary: routed.activity))
+            events.append(.toolFinished(result.record(toolName: tool)))
+        }
+        return Turn(tools: routed.tool.map { [$0] } ?? [],
+                    results: routed.result.map { [$0] } ?? [],
+                    events: events, reply: routed.reply, plan: nil)
+    }
+
+    // MARK: - Single intents
+
     /// Internal (not private) so the routing table is directly testable
     /// without iterating the paced stream.
     static func routeIntent(_ prompt: String, toolbox: ToolBox)
         -> (tool: String?, activity: String, result: ToolResult?, reply: String) {
-        let lower = prompt.lowercased()
+        let parsed = IntentGrammar.parse(prompt)
+        let specs = AgentToolRegistry.all(toolbox: toolbox)
 
-        func strip(_ text: String, prefixes: [String]) -> String {
-            var out = text
-            for p in prefixes where out.lowercased().hasPrefix(p) {
-                out = String(out.dropFirst(p.count))
-            }
-            return out.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        var attempt = parsed
+        var result = run(attempt, specs: specs)
+        for fallback in parsed.fallback where result?.succeeded != true {
+            attempt = fallback
+            result = run(attempt, specs: specs)
         }
-
-        // Explicit capture commands win over keyword rules below: in
-        // "remind me to finish the deck" or "remind me to check the status
-        // of the site", the verbs belong to the task title, not the intent.
-        // Reminders / tasks
-        if lower.hasPrefix("remind me") || lower.contains("add a task") || lower.contains("add task")
-            || lower.hasPrefix("todo") || lower.hasPrefix("i need to") {
-            var title = strip(prompt, prefixes: ["remind me to", "remind me", "add a task to", "add a task:", "add task", "todo:", "todo", "i need to"])
-            let due = NaturalDateParser.parse(prompt).map { _ in dueText(in: prompt) }
-            if let dueWords = due { title = removeSuffix(title, dueWords) }
-            let r = toolbox.createTask(title: sentenceCase(title), due: due)
-            return ("createTask", "Creating task", r, "Got it — \(r.summary.lowercased()).")
+        guard let result else {
+            return (nil, "", nil, "I couldn't run that just now.")
         }
-
-        // Notes — capture
-        // "note …" / "note: …" capture; "notes about …" is a search, not a capture.
-        if lower.hasPrefix("note ") || lower.hasPrefix("note:") || lower.contains("take a note")
-            || lower.hasPrefix("jot") {
-            let body = strip(prompt, prefixes: ["note that", "note:", "note", "take a note:", "take a note", "jot down", "jot"])
-            let title = String(body.prefix(48))
-            let r = toolbox.createNote(title: sentenceCase(title), body: body)
-            return ("createNote", "Writing note", r, "Noted.")
-        }
-
-        // Agenda
-        if lower.contains("agenda") || lower.contains("what's today") || lower.contains("what do i")
-            || lower.contains("needs my attention") || (lower.contains("today") && lower.contains("due")) {
-            let r = toolbox.agenda()
-            return ("agenda", "Composing agenda", r, r.detail)
-        }
-
-        // Blockers / project status
-        if lower.contains("blocking") || lower.contains("blocked") || lower.contains("status of") {
-            let name = strip(prompt, prefixes: ["what's blocking", "whats blocking", "what is blocking", "status of", "what's the status of"])
-            if !name.isEmpty, let r = optional(toolbox.projectStatus(name: name)) {
-                return ("projectStatus", "Checking project", r, r.detail)
-            }
-            let r = toolbox.queryTasks(filter: "blocked")
-            return ("queryTasks", "Looking at blocked tasks", r, r.detail)
-        }
-
-        // Complete
-        if let range = lower.range(of: #"(complete|finish|mark .* done|i did|check off) "#, options: .regularExpression) {
-            // Indices belong to `lower` — convert to a distance before
-            // slicing `prompt` (foreign String.Index use traps).
-            let offset = lower.distance(from: lower.startIndex, to: range.upperBound)
-            guard let start = prompt.index(prompt.startIndex, offsetBy: offset,
-                                           limitedBy: prompt.endIndex) else {
-                let r = toolbox.agenda()
-                return ("agenda", "Composing agenda", r, r.detail)
-            }
-            let query = String(prompt[start...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let r = toolbox.completeTask(query: query)
-            return ("completeTask", "Completing task", r, r.succeeded ? "Done — \(r.summary.lowercased())." : r.detail)
-        }
-
-        // Summaries of a day's notes
-        if lower.contains("summarize") || lower.contains("summary") {
-            let day = lower.contains("yesterday") ? "yesterday" : lower.contains("today") ? "today" : "yesterday"
-            let r = toolbox.notesFrom(dayDescription: day)
-            let extract = extractiveSummary(of: r.detail)
-            return ("notesFrom", "Reading notes", r, extract)
-        }
-
-        // Link
-        if lower.hasPrefix("link ") || lower.contains("connect ") {
-            let body = strip(prompt, prefixes: ["link", "connect"])
-            let parts = body.components(separatedBy: " to ")
-            if parts.count == 2 {
-                let r = toolbox.linkItems(from: parts[0].trimmingCharacters(in: .whitespaces),
-                                          to: parts[1].trimmingCharacters(in: .whitespaces))
-                return ("linkItems", "Linking items", r, r.succeeded ? "\(r.summary)." : r.detail)
-            }
-        }
-
-        // Search
-        if lower.contains("find") || lower.contains("search") || lower.contains("notes about")
-            || lower.hasPrefix("what do my notes") {
-            let query = strip(prompt, prefixes: ["find notes about", "find", "search notes for", "search for", "search", "notes about"])
-            let r = toolbox.searchNotes(query: query)
-            return ("searchNotes", "Searching notes", r, r.detail)
-        }
-
-        // Recall
-        if lower.contains("did i") || lower.contains("when did") || lower.contains("remember") {
-            let r = toolbox.recall(query: strip(prompt, prefixes: ["do you remember", "remember", "when did i", "did i"]))
-            return ("recall", "Remembering", r, r.detail)
-        }
-
-        // New project
-        if lower.contains("new project") || lower.contains("create a project") || lower.contains("start a project") {
-            let name = strip(prompt, prefixes: ["new project called", "new project:", "new project", "create a project called", "create a project", "start a project called", "start a project"])
-            let r = toolbox.createProject(name: sentenceCase(name))
-            return ("createProject", "Creating project", r, "\(r.summary). It's waiting in your Projects space.")
-        }
-
-        // Default: be honest about the floor mode.
-        let r = toolbox.agenda()
-        return ("agenda", "Composing agenda", r,
-                "I'm running in quick-intent mode on this device, so I keep to direct phrasing — try \"remind me to…\", \"what's blocking…\", or \"summarize my notes from yesterday\". Meanwhile, here's today:\n\(r.detail)")
+        return (attempt.tool, PlanExecutor.activity(for: attempt.tool), result,
+                reply(for: attempt, result: result))
     }
 
-    private static func optional(_ r: ToolResult) -> ToolResult? { r.succeeded ? r : nil }
+    private static func run(_ intent: ParsedIntent, specs: [AgentToolSpec]) -> ToolResult? {
+        specs.first { $0.name == intent.tool }?.run(intent.arguments)
+    }
 
-    /// The date phrase to excise from a task title. Mirrors the phrases
-    /// NaturalDateParser understands, so "in 3 days" never leaks into titles.
+    /// The deterministic brain's voice, per tool.
+    static func reply(for intent: ParsedIntent, result r: ToolResult) -> String {
+        if intent.isDefault {
+            return "I'm running in quick-intent mode on this device, so I keep to direct phrasing — try \"remind me to…\", \"what's blocking…\", or \"summarize my notes from yesterday\". Meanwhile, here's today:\n\(r.detail)"
+        }
+        switch intent.tool {
+        case "createTask": return "Got it — \(r.summary.lowercased())."
+        case "createNote": return "Noted."
+        case "completeTask": return r.succeeded ? "Done — \(r.summary.lowercased())." : r.detail
+        case "notesFrom": return extractiveSummary(of: r.detail)
+        case "linkItems": return r.succeeded ? "\(r.summary)." : r.detail
+        case "createProject": return "\(r.summary). It's waiting in your Projects space."
+        case "askNotes":
+            guard let answer = r.outputs["answer"], !r.citations.isEmpty else { return r.summary + "." }
+            let sources = r.citations.map { "[\($0.index)] \($0.title)" }.joined(separator: " · ")
+            return "\(answer)\n\nSources: \(sources)"
+        default: return r.detail
+        }
+    }
+
+    /// Kept for existing callers and tests; the grammar owns the logic.
     static func dueText(in prompt: String) -> String {
-        let lower = prompt.lowercased()
-        if let range = lower.range(of: #"in \d+ days?"#, options: .regularExpression) {
-            return String(lower[range])
-        }
-        let candidates = ["today", "tomorrow", "next week", "monday", "tuesday", "wednesday",
-                          "thursday", "friday", "saturday", "sunday"]
-        for c in candidates where lower.contains(c) { return c }
-        return prompt // NSDataDetector path will find the explicit date
-    }
-
-    private static func removeSuffix(_ text: String, _ words: String) -> String {
-        // Match on a lowercased copy, excise by distance from the original —
-        // String.Index values must never cross string instances.
-        let lowerText = text.lowercased()
-        let lowerWords = words.lowercased()
-        for token in [" on \(lowerWords)", " by \(lowerWords)", " \(lowerWords)"] {
-            guard let range = lowerText.range(of: token) else { continue }
-            let start = lowerText.distance(from: lowerText.startIndex, to: range.lowerBound)
-            let length = lowerText.distance(from: range.lowerBound, to: range.upperBound)
-            guard let from = text.index(text.startIndex, offsetBy: start, limitedBy: text.endIndex),
-                  let to = text.index(from, offsetBy: length, limitedBy: text.endIndex)
-            else { continue }
-            var out = text
-            out.removeSubrange(from..<to)
-            return out.trimmingCharacters(in: .whitespaces)
-        }
-        return text.trimmingCharacters(in: .whitespaces)
-    }
-
-    private static func sentenceCase(_ text: String) -> String {
-        guard let first = text.first else { return text }
-        return first.uppercased() + text.dropFirst()
+        IntentGrammar.dueText(in: prompt)
     }
 
     /// Cheap extractive summary: first sentence of each note section.

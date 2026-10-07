@@ -119,7 +119,7 @@ struct TaskRow: View {
                 if task.isDone {
                     app.services.tasks.reopen(task)
                 } else {
-                    app.services.tasks.complete(task)
+                    _ = app.services.tasks.complete(task)
                 }
             }
 
@@ -163,7 +163,7 @@ struct TaskRow: View {
             Button(task.isDone ? "Reopen" : "Complete",
                    systemImage: task.isDone ? "arrow.uturn.backward" : "checkmark.circle") {
                 if task.isDone { app.services.tasks.reopen(task) }
-                else { Haptics.success(); app.services.tasks.complete(task) }
+                else { Haptics.success(); _ = app.services.tasks.complete(task) }
             }
             Button("Due tomorrow", systemImage: "calendar.badge.clock") {
                 app.services.tasks.update(

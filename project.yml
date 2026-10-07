@@ -16,7 +16,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
     GENERATE_INFOPLIST_FILE: YES
     CURRENT_PROJECT_VERSION: "1"
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "0.2.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -27,14 +27,27 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      - path: Shared
       - path: Resources
         optional: true
+    dependencies:
+      # Today widget, embedded in the app. Reads a JSON snapshot from the
+      # shared App Group container; never opens the database.
+      - target: PocketBrainsWidget
     info:
       path: Support/Info.plist
       properties:
         # No proprietary encryption — exempt; keeps TestFlight/App Store
         # submissions from prompting for export compliance every build.
         ITSAppUsesNonExemptEncryption: false
+        # Opt-in integrations (Settings → Integrations). Nothing is requested
+        # until the user switches one on.
+        NSCalendarsFullAccessUsageDescription: "PocketBrains reads your events on this device so briefs and questions like “what's my afternoon look like?” include your meetings. It never edits events or sends them anywhere."
+        NSRemindersFullAccessUsageDescription: "PocketBrains adds tasks to Reminders when you ask it to export them, and removes only those reminders if you undo. Nothing leaves this device."
+    entitlements:
+      path: Support/PocketBrains.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.pocketbrains.shared]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pocketbrains.app
@@ -55,6 +68,32 @@ targets:
         #     url: https://github.com/ml-explore/mlx-swift-examples
         #     from: 2.25.0
         # dependencies: [package: MLXLibraries, products: [MLXLLM, MLXLMCommon]]
+
+  PocketBrainsWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Shared
+    info:
+      path: Support/Widget-Info.plist
+      properties:
+        CFBundleDisplayName: PocketBrains
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Support/PocketBrainsWidget.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.pocketbrains.shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pocketbrains.app.widget
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: PocketBrains
+        SKIP_INSTALL: YES
+        SWIFT_STRICT_CONCURRENCY: minimal
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: ""
+        ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME: ""
 
   PocketBrainsTests:
     type: bundle.unit-test

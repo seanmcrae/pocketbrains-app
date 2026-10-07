@@ -78,7 +78,13 @@ final class SemanticIndex {
         return vector.map(Float.init)
     }
 
-    private func cosine(_ a: [Float], _ b: [Float]) -> Float {
+    /// Sentence vector for arbitrary text (nil without the embedding asset).
+    /// Shared with the "Ask your notes" passage index.
+    func embedVector(_ text: String) -> [Float]? { embed(text) }
+
+    private func cosine(_ a: [Float], _ b: [Float]) -> Float { Self.cosine(a, b) }
+
+    static func cosine(_ a: [Float], _ b: [Float]) -> Float {
         guard a.count == b.count, !a.isEmpty else { return 0 }
         var dot: Float = 0, na: Float = 0, nb: Float = 0
         for i in a.indices {

@@ -5,6 +5,73 @@ yet on the App Store and without users. Numbers in this document come from
 the repository's own eval and CI, and say so; targets are marked as
 targets.
 
+## v0.2 at a glance
+
+v0.2 (pull request "PocketBrains v2: multi-step agent, cited note Q&A,
+system integrations, smarter tools") moves the agent from "one sentence,
+one tool call" to "one request, a checked plan", and makes every action
+reversible.
+
+| Area | What shipped | Job it serves |
+|---|---|---|
+| Multi-step agent | Planner (deterministic, plus Foundation Models guided generation), step executor with id passing and postconditions, plan card | Capture without filing: one sentence sets up a project |
+| Undo | Action journal with inverses, atomic per plan; Undo on cards and "undo that" | Trust it |
+| Ask your notes | Passage index (BM25 plus on-device embeddings), cited answers | Find what I already know |
+| Integrations (opt-in) | Calendar read for briefs and "what's my afternoon look like", Reminders export, App Intents, Today widget | Start the day oriented; reach without opening the app |
+| Tools and router | 24 tools (recurrence, reschedule, snooze, priority, milestones, append, search everything); lexicon, lemma and slot-frame router; richer dates | Capture without filing; know where things stand |
+
+### v0.2 metrics (from CI, deterministic brain only)
+
+| Metric | v0.1 | v0.2 | Source (GitHub Actions run) |
+|---|---|---|---|
+| Tests | 55 in 10 suites | 112 in 15 suites | 37644353241, 37652691087 |
+| Original 40 utterances, end-to-end | 77.5% | 97.5% | same |
+| Canonical + compound phrasing (71), end-to-end | n/a | 100% (gated) | 37652691087 |
+| Held-out paraphrases (34), end-to-end | n/a | 35.3% (11.8% before the router upgrade) | 37650929852, 37652691087 |
+| Ask-your-notes recall@3, BM25 path, 12 questions | n/a | 91.7% | 37652691087 |
+| Routing + execution latency p95, CI simulator | 7.3 ms | 25.7 ms | 37644353241, 37652691087 |
+
+Not measured: anything about Foundation Models or MLX (planning accuracy,
+grounded-answer faithfulness, latency). Those need hardware and are the
+first roadmap item.
+
+### v0.2 trade-offs
+
+- **Opt-in system data (EventKit) versus the privacy story.** Calendar
+  read and Reminders write are the first time PocketBrains touches data it
+  did not create. Both are off by default, explained on a dedicated screen
+  before the iOS prompt, and requested as separate permissions. The app
+  still makes no network calls. But if the user's calendars or reminder
+  lists sync through iCloud (or accounts such as Google or Exchange added
+  to iOS), reminders that PocketBrains exports leave the device through the
+  *system's* sync, under the user's account settings, and calendar events
+  it reads may have come from those services. The Integrations screen says
+  so. Calendar data is read per request and never stored in PocketBrains'
+  database; only the identifiers of exported reminders are kept, so an
+  export can be undone.
+- **Full-access calendar permission.** iOS 17+ offers write-only calendar
+  access, but reading agenda context requires full access. PocketBrains
+  asks for the least that delivers the feature and never writes events.
+- **Undo instead of confirmation.** The agent acts first and makes every
+  action reversible, rather than asking "are you sure?" on each step. That
+  keeps capture fast; the journal is the safety net. There are still no
+  delete tools.
+- **Plans stop on first failure and keep completed steps.** Completed
+  steps stay applied (and are undoable as a group) rather than rolling
+  back automatically; a step that ran but failed its postcondition is
+  reverted before stopping. Auto-rollback would hide partial progress the
+  user may want.
+- **Tool count versus a ~3B model.** 22 to 24 tools is a lot of schema for
+  a small context window; integration tools are offered only after
+  opt-in, and per-request tool trimming is next.
+- **Widget reads a snapshot, not the database.** Moving the SwiftData
+  store into the App Group would be a data migration with real risk; a
+  small JSON snapshot written after each task change is enough for a
+  glanceable widget.
+- **Held-out honesty over a higher number.** The deterministic router was
+  tuned on dev paraphrases only; the held-out split shows what that buys
+  off-grammar (35.3%), and the rest is the model tiers' job.
+
 ## Problem
 
 People who run their own work (independent consultants, founders, product
@@ -53,8 +120,9 @@ material to a chatbot.
 
 **In (built on `main`)**
 
-- One conversational thread over a local SwiftData store, with a 13-tool
-  agent (task, project, note, knowledge-graph, agenda and recall tools).
+- One conversational thread over a local SwiftData store, with a 24-tool
+  agent (v0.1 shipped 13; v0.2 added planning, undo, cited note Q&A,
+  recurrence, scheduling and opt-in integrations).
 - Three-tier brain: Apple Foundation Models, optional MLX Qwen3 build, and
   a deterministic intent router that always works.
 - Spaces: Today, Projects and a Knowledge constellation, sharing one write
@@ -69,8 +137,8 @@ material to a chatbot.
 - Accounts, sync, collaboration and any server component.
 - Cloud model fallback. If no on-device model is usable, the deterministic
   router answers; the app never sends a prompt off the device.
-- Calendar and email ingestion (would widen the privacy surface; revisit
-  with explicit per-source consent).
+- Email ingestion. (Calendar read shipped in v0.2 as an explicit opt-in;
+  see "v0.2 trade-offs".)
 - Non-English input for the deterministic router.
 
 ## Requirements
@@ -136,7 +204,9 @@ phrase a short reply) while deterministic code does the data work.
 |---|---|
 | Foundation Models API changes between iOS 26 point releases | API hedges listed in `docs/VERIFICATION.md`; adapter is one file |
 | Small model picks the wrong tool or misparses a date | Dates are re-parsed by `NaturalDateParser`; tool cards make actions visible and undoable from the spaces |
-| Prompt injection through note content triggers a destructive tool | No delete tools are exposed to the agent today; keep it that way or require confirmation |
+| Prompt injection through note content triggers a destructive tool | No delete tools are exposed to the agent; every agent mutation is journaled and undoable |
+| A planned request does the wrong thing in several places at once | The plan card shows every step; postconditions stop the plan; one Undo reverts the whole plan atomically |
+| Exported reminders leave the device through the user's iCloud sync | Off by default; stated on the Integrations screen before the iOS prompt |
 | Deterministic router feels rigid | In-app guidance teaches the grammar; the model tiers handle paraphrase |
 | SwiftData migration failures | Backup-then-fallback path in `Store` |
 
@@ -144,21 +214,21 @@ phrase a short reply) while deterministic code does the data work.
 
 **Now**
 
-- Run the eval corpus against the Foundation Models brain on device and
-  publish tool-call accuracy and time to first token.
-- Expose `appendNote` as a tool and add an `updateNote` capability.
+- Run the 139-utterance corpus (including compound requests) against the
+  Foundation Models brain on device; publish tool and plan accuracy, and
+  time to first token. Measure cited-answer faithfulness on a small
+  hand-labelled set.
+- Trim the tool list per request for the ~3B model.
 - Fix the O(n²) blocker lookup flagged in `docs/QA_REPORT.md`.
 
 **Next**
 
-- Rescheduling and milestone phrasing in the deterministic router
-  ("push X to Monday", "add a milestone").
 - Dynamic Type mapping and a full VoiceOver pass.
 - Localization of UI strings; multilingual routing via the model tiers.
+- Interactive widget (complete a task from the widget through App Intents).
 
 **Later**
 
-- Optional, consented local ingestion of calendar events.
 - iCloud private-database sync as an explicit opt-in, with the trade-off
   stated in the privacy story.
 - TestFlight and App Store release, subject to the licensing and naming

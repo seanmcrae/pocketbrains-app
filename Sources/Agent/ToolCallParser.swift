@@ -17,7 +17,31 @@ enum ToolCallParser {
         guard let open = text.range(of: "<tool_call>"),
               let close = text.range(of: "</tool_call>", range: open.upperBound..<text.endIndex)
         else { return nil }
-        let json = text[open.upperBound..<close.lowerBound]
+        return decode(text[open.upperBound..<close.lowerBound])
+    }
+
+    /// Every well-formed envelope, in order. Several calls in one reply are
+    /// executed as a multi-step plan; `$N` in an argument refers to what call
+    /// N created. Malformed envelopes are skipped, not fatal.
+    static func parseAll(_ text: String) -> [Call] {
+        var calls: [Call] = []
+        var searchStart = text.startIndex
+        while let open = text.range(of: "<tool_call>", range: searchStart..<text.endIndex),
+              let close = text.range(of: "</tool_call>", range: open.upperBound..<text.endIndex) {
+            if let call = decode(text[open.upperBound..<close.lowerBound]) { calls.append(call) }
+            searchStart = close.upperBound
+        }
+        return calls
+    }
+
+    /// The calls as a plan when there are two or more.
+    static func plan(from text: String, goal: String) -> AgentPlan? {
+        let calls = parseAll(text)
+        guard calls.count >= 2 else { return nil }
+        return AgentPlan(goal: goal, steps: calls.map { PlanStep(tool: $0.name, arguments: $0.arguments) })
+    }
+
+    private static func decode(_ json: Substring) -> Call? {
         guard let data = json.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let name = object["name"] as? String,

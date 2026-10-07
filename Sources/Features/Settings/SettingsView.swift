@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var confirmErase = false
     @State private var remindersOn = NotificationPlanner.isEnabled
     @State private var exportURL: URL?
+    @State private var showIntegrations = false
 
     var body: some View {
         ZStack {
@@ -21,6 +22,7 @@ struct SettingsView: View {
                     VStack(spacing: Space.l) {
                         intelligence
                         reminders
+                        integrations
                         conversation
                         library
                         privacy
@@ -35,6 +37,11 @@ struct SettingsView: View {
             }
         }
         .onAppear { exportURL = Exporter.makeFile(services: app.services) }
+        .sheet(isPresented: $showIntegrations) {
+            IntegrationsView()
+                .presentationDetents([.large])
+                .presentationBackground(.clear)
+        }
     }
 
     private var header: some View {
@@ -126,6 +133,19 @@ struct SettingsView: View {
                         wantOn, tasks: app.services.tasks.all())
                     if result != wantOn { remindersOn = result } // permission denied
                 }
+            }
+        }
+    }
+
+    private var integrations: some View {
+        let settings = IntegrationSettings.standard
+        let on = [settings.calendarEnabled ? "Calendar" : nil,
+                  settings.remindersEnabled ? "Reminders" : nil].compactMap { $0 }
+        return section("Integrations") {
+            row(icon: "calendar.badge.checkmark", title: "Calendar & Reminders",
+                detail: on.isEmpty ? "Off · opt in to calendar context and Reminders export"
+                                   : "On: " + on.joined(separator: ", ")) {
+                showIntegrations = true
             }
         }
     }

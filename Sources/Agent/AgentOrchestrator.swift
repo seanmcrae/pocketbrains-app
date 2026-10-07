@@ -63,6 +63,7 @@ final class AgentOrchestrator {
         liveToolEvents = []
         runningToolName = nil
 
+        toolbox.turnGroupID = UUID().uuidString
         currentTurn = Task { @MainActor in
             await runTurn(trimmed, allowBrainSwap: true)
         }
@@ -96,6 +97,7 @@ final class AgentOrchestrator {
         liveText = ""
         liveToolEvents = []
         runningToolName = nil
+        toolbox.turnGroupID = UUID().uuidString
         currentTurn = Task { @MainActor in
             await runTurn(lastPrompt, allowBrainSwap: true)
         }
@@ -129,7 +131,10 @@ final class AgentOrchestrator {
                                         detail: "", succeeded: true))
         case .toolFinished(let record):
             runningToolName = nil
-            if let index = liveToolEvents.lastIndex(where: { $0.toolName == record.toolName && $0.detail.isEmpty }) {
+            if let index = liveToolEvents.firstIndex(where: { $0.id == record.id }) {
+                // Same card updating in place (a plan card's final state).
+                liveToolEvents[index] = record
+            } else if let index = liveToolEvents.lastIndex(where: { $0.toolName == record.toolName && $0.detail.isEmpty }) {
                 liveToolEvents[index] = record
             } else {
                 liveToolEvents.append(record)
@@ -143,6 +148,44 @@ final class AgentOrchestrator {
         }
     }
 
+    // MARK: - Undo
+
+    /// Bumped after every undo so cards re-read their journal state.
+    private(set) var undoRevision = 0
+
+    /// True when the card's action (or whole plan) has already been reverted.
+    func isUndone(_ record: ToolEventRecord) -> Bool {
+        _ = undoRevision
+        if let group = record.undoGroup {
+            return toolbox.services.journal.pending(inGroup: group).isEmpty
+        }
+        if let id = record.journalID {
+            return toolbox.services.journal.entry(id: id)?.isUndone ?? true
+        }
+        return false
+    }
+
+    /// The Undo button on a tool or plan card. Reverts that action (or the
+    /// whole plan, atomically) and posts the result as its own agent turn.
+    func undo(_ record: ToolEventRecord) {
+        guard !isBusy else { return }
+        let result: ToolResult
+        if let group = record.undoGroup {
+            result = toolbox.undo(group: group)
+        } else if let id = record.journalID {
+            result = toolbox.undo(entryID: id)
+        } else {
+            return
+        }
+        undoRevision += 1
+        Haptics.commit()
+        let reply = ChatMessage(role: .agent, text: result.detail)
+        reply.toolEvents = [result.record(toolName: "undo")]
+        context.insert(reply)
+        try? context.save()
+        messages.append(reply)
+    }
+
     private func finishTurn(with text: String) {
         let reply = ChatMessage(role: .agent, text: text)
         reply.toolEvents = liveToolEvents
@@ -152,6 +195,8 @@ final class AgentOrchestrator {
         liveText = ""
         liveToolEvents = []
         runningToolName = nil
+        toolbox.turnGroupID = ""
+        undoRevision += 1
         phase = .idle
     }
 }

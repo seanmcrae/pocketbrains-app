@@ -88,6 +88,30 @@ struct IntentFallbackBackendTests {
         #expect(box.services.notes.all().count == 1)
     }
 
+    @Test func framesFillSlots() {
+        let reschedule = IntentGrammar.parse("Move draft quarterly report to next Tuesday")
+        #expect(reschedule.tool == "rescheduleTask")
+        #expect(reschedule.arguments == ["query": "draft quarterly report", "to": "next Tuesday"])
+        let recurring = IntentGrammar.parse("Remind me to take out the bins every other Thursday")
+        #expect(recurring.tool == "createTask")
+        #expect(recurring.arguments["title"] == "Take out the bins")
+        #expect(recurring.arguments["repeats"] == "every other thursday")
+        let milestone = IntentGrammar.parse("Add milestone Public beta to Q3 Planning by end of month")
+        #expect(milestone.arguments == ["title": "Public beta", "project": "Q3 Planning", "target": "end of month"])
+        let snooze = IntentGrammar.parse("Snooze clean the gutters for 3 days")
+        #expect(snooze.arguments == ["query": "clean the gutters", "until": "3 days"])
+    }
+
+    @Test func lemmaFallbackHandlesInflections() {
+        #expect(Lexicon.fallbackLemma("finished") == "finish")
+        #expect(Lexicon.fallbackLemma("pushed") == "push")
+        #expect(Lexicon.fallbackLemma("moved") == "move")
+        #expect(Lexicon.fallbackLemma("postponing") == "postpon" || Lexicon.fallbackLemma("postponing") == "postpone")
+        #expect(Lexicon.fallbackLemma("did") == "do")
+        let tokens = Lexicon.tokens("I postponed the dentist to Friday")
+        #expect(Lexicon.firstAction(in: tokens)?.0 == .reschedule)
+    }
+
     @Test func dueTextMatchesParserPhrases() {
         #expect(IntentFallbackBackend.dueText(in: "back up the laptop in 3 days") == "in 3 days")
         #expect(IntentFallbackBackend.dueText(in: "call mum in 1 day") == "in 1 day")

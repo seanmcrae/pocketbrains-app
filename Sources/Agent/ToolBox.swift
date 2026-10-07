@@ -7,30 +7,68 @@ struct ToolResult {
     var summary: String
     var detail: String
     var succeeded: Bool = true
+    /// Journal entry recorded by a mutating tool, so the card can offer Undo.
+    var journalID: UUID? = nil
+    /// Structured outputs later plan steps can reference: `ref` (an exact
+    /// `id:<uuid>` reference), `kind`, `title`, and tool-specific keys.
+    var outputs: [String: String] = [:]
+    /// Sources behind a cited answer (askNotes).
+    var citations: [Citation] = []
 
     func record(toolName: String) -> ToolEventRecord {
-        .init(toolName: toolName, summary: summary, detail: detail, succeeded: succeeded)
+        .init(toolName: toolName, summary: summary, detail: detail,
+              succeeded: succeeded, journalID: journalID,
+              citations: citations.isEmpty ? nil : citations)
     }
 }
 
 /// The canonical implementation of every capability the agent has.
 /// Every backend (Foundation Models, MLX, fallback parser) funnels here,
 /// and here funnels into DataServices — one write path for the whole app.
+/// Every mutation also records its inverse in the action journal.
 @MainActor
 final class ToolBox {
     let services: DataServices
     let semanticIndex: SemanticIndex
+    /// Passage index behind "Ask your notes".
+    let notesIndex: NotesRAG
+    /// Opt-in EventKit integrations (Calendar read, Reminders export).
+    /// Replaceable so tests can inject mocks.
+    var integrations: Integrations
+
+    /// Journal group for the current turn or plan. The orchestrator sets a
+    /// fresh value per turn so "undo that" reverts everything the turn did;
+    /// when empty (App Intents, tests), each action is its own group.
+    var turnGroupID: String = ""
 
     init(services: DataServices, semanticIndex: SemanticIndex) {
         self.services = services
         self.semanticIndex = semanticIndex
+        self.notesIndex = NotesRAG(context: services.context, embedder: semanticIndex)
+        self.integrations = Integrations()
+    }
+
+    /// Record an inverse for a mutation and return the journal id.
+    @discardableResult
+    func journal(_ tool: String, _ summary: String, _ inverse: [InverseStep]) -> UUID {
+        let group = turnGroupID.isEmpty ? UUID().uuidString : turnGroupID
+        return services.journal.record(tool: tool, summary: summary,
+                                       group: group, inverse: inverse).id
     }
 
     // MARK: Tasks
 
     func createTask(title: String, details: String = "", due: String? = nil,
-                    priority: String? = nil, projectName: String? = nil) -> ToolResult {
-        let dueDate = due.flatMap { NaturalDateParser.parse($0) }
+                    priority: String? = nil, projectName: String? = nil,
+                    dueDate exactDue: Date? = nil, repeats: String? = nil) -> ToolResult {
+        let rule = repeats.flatMap { Recurrence.parse($0) }
+        var dueDate = exactDue ?? due.flatMap { NaturalDateParser.parse($0) }
+        if dueDate == nil, let rule {
+            // First occurrence: the anchored weekday ("every other Monday"),
+            // otherwise today.
+            dueDate = rule.anchorWeekday.map { NaturalDateParser.nextWeekday($0) }
+                ?? Calendar.current.startOfDay(for: .now)
+        }
         let pri = TaskPriority.from(priority)
         let project = projectName.flatMap { services.projects.find(matching: $0) }
         let task = services.tasks.create(
@@ -38,8 +76,15 @@ final class ToolBox {
         var bits = ["Created task “\(task.title)”"]
         if let dueDate { bits.append("due \(NaturalDateParser.describe(dueDate))") }
         if let project { bits.append("in \(project.name)") }
-        return ToolResult(summary: bits.joined(separator: ", "),
-                          detail: bits.joined(separator: ", ") + ".")
+        else if let projectName, !projectName.isEmpty { bits.append("unfiled (no project “\(projectName)”)") }
+        if let rule {
+            services.tasks.setRecurrence(task, rule.rule)
+            bits.append("repeats \(rule.rule.label)")
+        }
+        let summary = bits.joined(separator: ", ")
+        let jid = journal("createTask", summary, [.init(kind: .deleteTask, id: task.id)])
+        return ToolResult(summary: summary, detail: summary + ".", journalID: jid,
+                          outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
     }
 
     func completeTask(query: String) -> ToolResult {
@@ -47,9 +92,24 @@ final class ToolBox {
             return ToolResult(summary: "No task matching “\(query)”",
                               detail: "No task found matching “\(query)”.", succeeded: false)
         }
-        services.tasks.complete(task)
-        return ToolResult(summary: "Completed “\(task.title)”",
-                          detail: "Marked “\(task.title)” as done.")
+        if task.isDone {
+            return ToolResult(summary: "“\(task.title)” was already done",
+                              detail: "“\(task.title)” was already marked done.",
+                              outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
+        }
+        let spawned = services.tasks.complete(task)
+        var summary = "Completed “\(task.title)”"
+        var inverse: [InverseStep] = []
+        if let spawned {
+            if let next = spawned.dueDate { summary += " · next one \(NaturalDateParser.describe(next))" }
+            inverse.append(.init(kind: .moveRecurrence, id: task.id, text: spawned.id.uuidString))
+            inverse.append(.init(kind: .deleteTask, id: spawned.id))
+        }
+        inverse.append(.init(kind: .reopenTask, id: task.id))
+        let jid = journal("completeTask", summary, inverse)
+        return ToolResult(summary: summary,
+                          detail: "Marked “\(task.title)” as done.", journalID: jid,
+                          outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
     }
 
     func updateTask(query: String, due: String? = nil, priority: String? = nil,
@@ -58,6 +118,7 @@ final class ToolBox {
             return ToolResult(summary: "No task matching “\(query)”",
                               detail: "No task found matching “\(query)”.", succeeded: false)
         }
+        let before = TaskSnapshot(task)
         var changes: [String] = []
         if let due, let date = NaturalDateParser.parse(due) {
             services.tasks.update(task, due: date)
@@ -72,8 +133,12 @@ final class ToolBox {
             changes.append("moved to \(project.name)")
         }
         let what = changes.isEmpty ? "no changes" : changes.joined(separator: ", ")
-        return ToolResult(summary: "Updated “\(task.title)”: \(what)",
-                          detail: "Updated “\(task.title)” — \(what).")
+        let summary = "Updated “\(task.title)”: \(what)"
+        let jid = changes.isEmpty ? nil
+            : journal("updateTask", summary, [.init(kind: .restoreTask, id: task.id, task: before)])
+        return ToolResult(summary: summary,
+                          detail: "Updated “\(task.title)” — \(what).", journalID: jid,
+                          outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
     }
 
     func queryTasks(filter: String, projectName: String? = nil) -> ToolResult {
@@ -101,12 +166,118 @@ final class ToolBox {
                           detail: lines.joined(separator: "\n"))
     }
 
+    /// Move a task's due date: to an absolute date ("Friday", "next Tues")
+    /// or by a relative shift ("2 days", "a week") from its current due date.
+    func rescheduleTask(query: String, to: String? = nil, by: String? = nil) -> ToolResult {
+        guard let task = services.tasks.find(matching: query) else {
+            return ToolResult(summary: "No task matching “\(query)”",
+                              detail: "No task found matching “\(query)”.", succeeded: false)
+        }
+        let cal = Calendar.current
+        var newDate: Date?
+        if let to, !to.isEmpty { newDate = NaturalDateParser.parse(to) }
+        if newDate == nil, let by, let days = NaturalDateParser.days(in: by) {
+            let base = task.dueDate.map { cal.startOfDay(for: $0) } ?? cal.startOfDay(for: .now)
+            newDate = cal.date(byAdding: .day, value: days, to: base)
+        }
+        guard let newDate else {
+            return ToolResult(summary: "Couldn't read the new date",
+                              detail: "I couldn't tell when to move “\(task.title)” to.", succeeded: false)
+        }
+        return changeDue(task, to: newDate, tool: "rescheduleTask", verb: "Moved")
+    }
+
+    /// Hide a task until later: "tomorrow" by default, "2 days", "a week",
+    /// or "until Monday". Counted from today, not from the old due date.
+    func snoozeTask(query: String, until: String? = nil) -> ToolResult {
+        guard let task = services.tasks.find(matching: query) else {
+            return ToolResult(summary: "No task matching “\(query)”",
+                              detail: "No task found matching “\(query)”.", succeeded: false)
+        }
+        let text = (until ?? "").trimmingCharacters(in: .whitespaces)
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: .now)
+        let date: Date?
+        if text.isEmpty {
+            date = cal.date(byAdding: .day, value: 1, to: today)
+        } else if let days = NaturalDateParser.days(in: text), !text.lowercased().contains("until") {
+            date = cal.date(byAdding: .day, value: days, to: today)
+        } else {
+            date = NaturalDateParser.parse(text)
+        }
+        guard let date else {
+            return ToolResult(summary: "Couldn't read how long to snooze",
+                              detail: "I couldn't tell how long to snooze “\(task.title)”.", succeeded: false)
+        }
+        return changeDue(task, to: date, tool: "snoozeTask", verb: "Snoozed")
+    }
+
+    private func changeDue(_ task: TaskItem, to date: Date, tool: String, verb: String) -> ToolResult {
+        let before = TaskSnapshot(task)
+        services.tasks.update(task, due: .some(date))
+        let summary = "\(verb) “\(task.title)” to \(NaturalDateParser.describe(date))"
+        let jid = journal(tool, summary, [.init(kind: .restoreTask, id: task.id, task: before)])
+        return ToolResult(summary: summary, detail: summary + ".", journalID: jid,
+                          outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
+    }
+
+    func setPriority(query: String, priority: String) -> ToolResult {
+        guard let task = services.tasks.find(matching: query) else {
+            return ToolResult(summary: "No task matching “\(query)”",
+                              detail: "No task found matching “\(query)”.", succeeded: false)
+        }
+        guard let level = TaskPriority.parse(priority) else {
+            return ToolResult(summary: "Unknown priority “\(priority)”",
+                              detail: "Priority must be low, normal, high or urgent.", succeeded: false)
+        }
+        let before = TaskSnapshot(task)
+        services.tasks.update(task, priority: level)
+        let summary = "“\(task.title)” is now \(level.label.lowercased()) priority"
+        let jid = journal("setPriority", summary, [.init(kind: .restoreTask, id: task.id, task: before)])
+        return ToolResult(summary: summary, detail: summary + ".", journalID: jid,
+                          outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
+    }
+
+    /// Make a task repeat ("every weekday", "every other Monday", "every
+    /// 3 days"), or stop it repeating ("never", "none", "stop").
+    func setRecurrence(query: String, rule text: String) -> ToolResult {
+        guard let task = services.tasks.find(matching: query) else {
+            return ToolResult(summary: "No task matching “\(query)”",
+                              detail: "No task found matching “\(query)”.", succeeded: false)
+        }
+        let previous = services.tasks.recurrence(of: task)
+        let stop = ["none", "never", "stop", "no", "off", "don't repeat", "not"].contains {
+            text.lowercased().trimmingCharacters(in: .whitespaces) == $0 || text.lowercased().hasPrefix("stop")
+        }
+        let parsed = Recurrence.parse(text)
+        guard stop || parsed != nil else {
+            return ToolResult(summary: "Couldn't read the repeat rule",
+                              detail: "Try daily, weekdays, weekly, every other Monday or every 3 days.",
+                              succeeded: false)
+        }
+        services.tasks.setRecurrence(task, stop ? nil : parsed?.rule)
+        if task.dueDate == nil, let parsed {
+            services.tasks.update(task, due: .some(parsed.anchorWeekday.map { NaturalDateParser.nextWeekday($0) }
+                ?? Calendar.current.startOfDay(for: .now)))
+        }
+        let summary = stop ? "“\(task.title)” no longer repeats"
+                           : "“\(task.title)” repeats \(parsed!.rule.label)"
+        let undoRule: InverseStep = previous.map { .init(kind: .setRecurrence, id: task.id, text: $0.raw) }
+            ?? .init(kind: .clearRecurrence, id: task.id)
+        let jid = journal("setRecurrence", summary, [undoRule])
+        return ToolResult(summary: summary, detail: summary + ".", journalID: jid,
+                          outputs: ["ref": EntityRef.make(task.id), "kind": "task", "title": task.title])
+    }
+
     // MARK: Projects
 
     func createProject(name: String, summary: String = "") -> ToolResult {
         let project = services.projects.create(name: name, summary: summary)
-        return ToolResult(summary: "Created project “\(project.name)”",
-                          detail: "Created project “\(project.name)” (\(project.hue.name)).")
+        let line = "Created project “\(project.name)”"
+        let jid = journal("createProject", line, [.init(kind: .deleteProject, id: project.id)])
+        return ToolResult(summary: line,
+                          detail: "Created project “\(project.name)” (\(project.hue.name)).", journalID: jid,
+                          outputs: ["ref": EntityRef.make(project.id), "kind": "project", "title": project.name])
     }
 
     func projectStatus(name: String) -> ToolResult {
@@ -142,9 +313,32 @@ final class ToolBox {
                               detail: "No project found.", succeeded: false)
         }
         let date = target.flatMap { NaturalDateParser.parse($0) }
-        services.projects.addMilestone(to: project, title: title, target: date)
-        return ToolResult(summary: "Milestone “\(title)” added to \(project.name)",
-                          detail: "Added milestone “\(title)” to \(project.name).")
+        let milestone = services.projects.addMilestone(to: project, title: title, target: date)
+        var line = "Milestone “\(title)” added to \(project.name)"
+        if let date { line += ", target \(NaturalDateParser.describe(date))" }
+        let jid = journal("addMilestone", line, [.init(kind: .deleteMilestone, id: milestone.id)])
+        return ToolResult(summary: line, detail: line + ".", journalID: jid,
+                          outputs: ["ref": EntityRef.make(milestone.id), "kind": "milestone", "title": title])
+    }
+
+    func listMilestones(projectName: String) -> ToolResult {
+        guard let project = services.projects.find(matching: projectName) else {
+            return ToolResult(summary: "No project matching “\(projectName)”",
+                              detail: "No project found matching “\(projectName)”.", succeeded: false)
+        }
+        let milestones = services.projects.milestones(of: project)
+        guard !milestones.isEmpty else {
+            return ToolResult(summary: "\(project.name) has no milestones",
+                              detail: "\(project.name) has no milestones yet.")
+        }
+        let lines = milestones.map { m -> String in
+            var line = "• \(m.title)"
+            if let t = m.targetDate { line += " (\(NaturalDateParser.describe(t)))" }
+            if m.isReached { line += " ✓ reached" }
+            return line
+        }
+        return ToolResult(summary: "\(milestones.count) milestone\(milestones.count == 1 ? "" : "s") in \(project.name)",
+                          detail: "\(project.name) milestones:\n" + lines.joined(separator: "\n"))
     }
 
     // MARK: Notes
@@ -154,6 +348,7 @@ final class ToolBox {
         let project = projectName.flatMap { services.projects.find(matching: $0) }
         let note = services.notes.create(title: title, body: body, tags: tags, project: project)
         semanticIndex.index(note: note)
+        notesIndex.upsert(note)
         if let project {
             services.graph.link(from: (.note, note.id), to: (.project, project.id), relation: "belongs-to")
         }
@@ -162,10 +357,15 @@ final class ToolBox {
             tasks: services.tasks.all(includeDone: true))
         let weaveNote = woven.isEmpty
             ? "" : " Linked to \(woven.joined(separator: ", "))."
-        return ToolResult(summary: woven.isEmpty
-                            ? "Noted “\(note.title)”"
-                            : "Noted “\(note.title)” · \(woven.count) link\(woven.count == 1 ? "" : "s") woven",
-                          detail: "Created note “\(note.title)”\(project.map { " in \($0.name)" } ?? "").\(weaveNote)")
+        let summary = woven.isEmpty
+            ? "Noted “\(note.title)”"
+            : "Noted “\(note.title)” · \(woven.count) link\(woven.count == 1 ? "" : "s") woven"
+        // Deleting the note also removes every edge touching it (belongs-to, woven).
+        let jid = journal("createNote", summary, [.init(kind: .deleteNote, id: note.id)])
+        return ToolResult(summary: summary,
+                          detail: "Created note “\(note.title)”\(project.map { " in \($0.name)" } ?? "").\(weaveNote)",
+                          journalID: jid,
+                          outputs: ["ref": EntityRef.make(note.id), "kind": "note", "title": note.title])
     }
 
     func appendNote(query: String, text: String) -> ToolResult {
@@ -173,10 +373,15 @@ final class ToolBox {
             return ToolResult(summary: "No note matching “\(query)”",
                               detail: "No note found.", succeeded: false)
         }
+        let previous = note.body
         services.notes.append(note, text: text)
         semanticIndex.index(note: note)
-        return ToolResult(summary: "Appended to “\(note.title)”",
-                          detail: "Appended to note “\(note.title)”.")
+        notesIndex.upsert(note)
+        let summary = "Appended to “\(note.title)”"
+        let jid = journal("appendNote", summary, [.init(kind: .restoreNoteBody, id: note.id, text: previous)])
+        return ToolResult(summary: summary,
+                          detail: "Appended to note “\(note.title)”.", journalID: jid,
+                          outputs: ["ref": EntityRef.make(note.id), "kind": "note", "title": note.title])
     }
 
     func searchNotes(query: String) -> ToolResult {
@@ -192,6 +397,30 @@ final class ToolBox {
                           detail: lines.joined(separator: "\n"))
     }
 
+    /// Answer a question from the user's notes, with [n] citations.
+    /// `detail` carries the extractive answer plus the numbered source
+    /// passages, so a language model can write its own grounded reply.
+    func askNotes(question: String) -> ToolResult {
+        let chunks = notesIndex.retrieve(question, k: 4)
+        guard !chunks.isEmpty else {
+            return ToolResult(summary: "Nothing in your notes on that",
+                              detail: "No notes mention “\(question)”. Say so plainly; don't guess.")
+        }
+        let answer = CitedAnswerComposer.compose(question: question, chunks: chunks)
+        let sources = CitedAnswerComposer.groundingContext(chunks: chunks, citations: answer.citations)
+        let count = answer.citations.count
+        return ToolResult(
+            summary: "Answered from \(count) note\(count == 1 ? "" : "s")",
+            detail: """
+            \(answer.text)
+
+            Sources (answer only from these; cite inline as [n]):
+            \(sources)
+            """,
+            outputs: ["answer": answer.text],
+            citations: answer.citations)
+    }
+
     func notesFrom(dayDescription: String) -> ToolResult {
         let day = NaturalDateParser.parse(dayDescription)
             ?? Calendar.current.date(byAdding: .day, value: -1, to: .now)!
@@ -205,6 +434,21 @@ final class ToolBox {
                           detail: lines.joined(separator: "\n\n"))
     }
 
+    /// One query across tasks, projects and notes (keyword + semantic).
+    func searchEverything(query: String) -> ToolResult {
+        let found = SearchEngine.search(query, services: services, index: semanticIndex)
+        guard !found.isEmpty else {
+            return ToolResult(summary: "Nothing found", detail: "Nothing matches “\(query)”.")
+        }
+        var lines: [String] = []
+        lines += found.tasks.map { "Task: \($0.title)\($0.isDone ? " (done)" : "")" }
+        lines += found.projects.map { "Project: \($0.name)" }
+        lines += found.notes.map { "Note: \($0.title)" }
+        let count = found.tasks.count + found.projects.count + found.notes.count
+        return ToolResult(summary: "\(count) match\(count == 1 ? "" : "es") across your library",
+                          detail: lines.joined(separator: "\n"))
+    }
+
     // MARK: Knowledge
 
     func linkItems(from: String, to: String, relation: String = "references") -> ToolResult {
@@ -216,9 +460,18 @@ final class ToolBox {
             return ToolResult(summary: "Couldn't find “\(to)”",
                               detail: "No entity found matching “\(to)”.", succeeded: false)
         }
-        services.graph.link(from: (source.0, source.1), to: (target.0, target.1), relation: relation)
-        return ToolResult(summary: "Linked “\(source.2)” → “\(target.2)”",
-                          detail: "Linked \(source.0.rawValue) “\(source.2)” to \(target.0.rawValue) “\(target.2)” (\(relation)).")
+        let existed = services.graph.allLinks().contains {
+            $0.fromID == source.1 && $0.toID == target.1 && $0.relation == relation
+        }
+        let link = services.graph.link(from: (source.0, source.1), to: (target.0, target.1), relation: relation)
+        let summary = "Linked “\(source.2)” → “\(target.2)”"
+        let jid = existed ? nil
+            : journal("linkItems", summary, [.init(kind: .deleteLink, id: link.id)])
+        return ToolResult(summary: summary,
+                          detail: "Linked \(source.0.rawValue) “\(source.2)” to \(target.0.rawValue) “\(target.2)” (\(relation)).",
+                          journalID: jid,
+                          outputs: ["ref": EntityRef.make(link.id), "kind": "link",
+                                    "from": EntityRef.make(source.1), "to": EntityRef.make(target.1)])
     }
 
     /// Resolve a free-text reference to any entity, preferring notes → tasks → projects.
@@ -227,6 +480,109 @@ final class ToolBox {
         if let task = services.tasks.find(matching: query) { return (.task, task.id, task.title) }
         if let project = services.projects.find(matching: query) { return (.project, project.id, project.name) }
         return nil
+    }
+
+    // MARK: Undo
+
+    /// Revert the last turn/plan (`turn`, default) or only the last action (`step`).
+    func undo(scope: String? = nil) -> ToolResult {
+        undoEngine.undoLast(scope: .from(scope))
+    }
+
+    func undo(entryID: UUID) -> ToolResult {
+        undoEngine.undo(entryID: entryID)
+    }
+
+    func undo(group: String) -> ToolResult {
+        undoEngine.undo(group: group)
+    }
+
+    private var undoEngine: UndoEngine {
+        UndoEngine(services: services,
+                   reminders: integrations.settings.remindersEnabled ? integrations.reminders : nil)
+    }
+
+    // MARK: System integrations (opt-in)
+
+    /// Calendar context: events in a window ("this afternoon", "tomorrow"),
+    /// free stretches, and the tasks due that day.
+    func calendarAgenda(window text: String? = nil, now: Date = .now) -> ToolResult {
+        let window = DayWindow.parse(text)
+        guard integrations.calendarReady else {
+            return ToolResult(summary: "Calendar access is off",
+                              detail: "Calendar access is off. Turn it on in Settings → Integrations to include your events.",
+                              succeeded: false)
+        }
+        let interval = window.interval(now: now)
+        let events = integrations.calendar.events(from: interval.start, to: interval.end)
+        let lines = AgendaComposer.describe(events, in: interval)
+        let gaps = AgendaComposer.freeGaps(events, in: interval)
+        let cal = Calendar.current
+        let day = cal.date(byAdding: .day, value: window.dayOffset, to: cal.startOfDay(for: now))!
+        let due = services.tasks.all().filter { $0.dueDate.map { cal.isDate($0, inSameDayAs: day) } ?? false }
+
+        var detail: [String] = []
+        detail.append(lines.isEmpty ? "No events \(window.label)." : "Events \(window.label):\n" + lines.joined(separator: "\n"))
+        if let longest = gaps.max(by: { $0.duration < $1.duration }), !lines.isEmpty {
+            detail.append("Longest free stretch: \(longest.start.formatted(.dateTime.hour().minute()))–\(longest.end.formatted(.dateTime.hour().minute())).")
+        }
+        if !due.isEmpty { detail.append("Tasks due: " + due.map(\.title).joined(separator: "; ")) }
+        let count = lines.count
+        return ToolResult(summary: count == 0 ? "Nothing on your calendar \(window.label)"
+                                               : "\(count) event\(count == 1 ? "" : "s") \(window.label)",
+                          detail: detail.joined(separator: "\n"),
+                          outputs: ["events": String(count)])
+    }
+
+    /// Export tasks to the system Reminders app. `scope`: today | upcoming |
+    /// overdue | all, or words from a task title. Never exports a task twice.
+    func exportToReminders(scope: String? = nil) -> ToolResult {
+        guard integrations.remindersReady else {
+            return ToolResult(summary: "Reminders sync is off",
+                              detail: "Reminders sync is off. Turn it on in Settings → Integrations first.",
+                              succeeded: false)
+        }
+        let filter = (scope ?? "today").trimmingCharacters(in: .whitespaces).lowercased()
+        let tasks: [TaskItem]
+        switch filter {
+        case "", "today", "due": tasks = services.tasks.dueToday()
+        case "upcoming", "this week", "week": tasks = services.tasks.dueWithin(days: 7)
+        case "overdue": tasks = services.tasks.all().filter(\.isOverdue)
+        case "all", "everything": tasks = services.tasks.all()
+        default: tasks = services.tasks.find(matching: filter).map { [$0] } ?? []
+        }
+        let already = Set(services.context.fetchAll(ReminderExport.self).map(\.taskID))
+        let fresh = tasks.filter { !already.contains($0.id) }
+        guard !fresh.isEmpty else {
+            return ToolResult(summary: tasks.isEmpty ? "No tasks to export" : "Already in Reminders",
+                              detail: tasks.isEmpty ? "No tasks matched “\(filter)”."
+                                                    : "Those tasks are already in Reminders.")
+        }
+        var inverse: [InverseStep] = []
+        var exported: [String] = []
+        var failures = 0
+        for task in fresh {
+            do {
+                let identifier = try integrations.reminders.save(ReminderMapper.draft(for: task))
+                services.context.insert(ReminderExport(taskID: task.id, reminderID: identifier))
+                inverse.append(.init(kind: .removeReminder, id: task.id, text: identifier))
+                exported.append(task.title)
+            } catch {
+                failures += 1
+            }
+        }
+        try? services.context.save()
+        guard !exported.isEmpty else {
+            return ToolResult(summary: "Couldn't write to Reminders",
+                              detail: "Reminders refused the export; check that a default list exists.",
+                              succeeded: false)
+        }
+        let summary = "Exported \(exported.count) task\(exported.count == 1 ? "" : "s") to Reminders"
+        let jid = journal("exportToReminders", summary, inverse)
+        var detail = summary + ": " + exported.joined(separator: "; ") + "."
+        if failures > 0 { detail += " \(failures) could not be exported." }
+        return ToolResult(summary: summary, detail: detail, journalID: jid,
+                          outputs: ["count": String(exported.count)])
     }
 
     // MARK: Agenda & recall
@@ -274,6 +630,16 @@ final class ToolBox {
 }
 
 extension TaskPriority {
+    /// Strict parse for setPriority: nil when the word isn't a priority.
+    static func parse(_ string: String) -> TaskPriority? {
+        let lower = string.lowercased()
+        if lower.contains("urgent") || lower.contains("critical") || lower.contains("asap") || lower.contains("top") { return .urgent }
+        if lower.contains("high") || lower.contains("important") { return .high }
+        if lower.contains("low") || lower.contains("someday") || lower.contains("minor") { return .low }
+        if lower.contains("normal") || lower.contains("medium") || lower.contains("default") { return .normal }
+        return nil
+    }
+
     static func from(_ string: String?) -> TaskPriority {
         switch string?.lowercased() {
         case "low": .low

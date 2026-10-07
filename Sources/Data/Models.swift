@@ -263,6 +263,14 @@ struct ToolEventRecord: Codable, Identifiable, Hashable {
     var summary: String
     var detail: String
     var succeeded: Bool
+    /// Journal entry this action can be undone through (mutating tools only).
+    var journalID: UUID? = nil
+    /// Undo the whole group (a plan card undoes every step it ran).
+    var undoGroup: String? = nil
+    /// "2/4" when the call ran as a step of a multi-step plan.
+    var stepLabel: String? = nil
+    /// Source notes behind a cited answer ([n] → note).
+    var citations: [Citation]? = nil
 }
 
 // MARK: - Semantic index cache

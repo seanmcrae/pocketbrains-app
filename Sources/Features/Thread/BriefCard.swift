@@ -53,6 +53,12 @@ struct BriefCard: View {
                 Spacer()
             }
 
+            if let calendarLine = brief.calendarLine {
+                Label(calendarLine, systemImage: "calendar")
+                    .font(Type.caption)
+                    .foregroundStyle(Paper.tertiary)
+            }
+
             if let focus = brief.focus {
                 Text(focus)
                     .font(Type.callout)

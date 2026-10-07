@@ -99,7 +99,8 @@ struct ThreadView: View {
                 }
                 if showBrief {
                     BriefCard(
-                        brief: DailyBrief.compose(services: app.services),
+                        brief: DailyBrief.compose(services: app.services,
+                                                  integrations: app.toolbox.integrations),
                         onPlan: {
                             briefSeen = DailyBrief.todayKey
                             app.agent.send("What needs my attention today?")

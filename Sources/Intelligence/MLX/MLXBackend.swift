@@ -40,6 +40,14 @@ final class MLXBackend: ModelBackend {
                         let output = try await generate(container, userText: transcript,
                                                         continuation: continuation,
                                                         prefix: aggregated)
+                        // Several calls in one reply run as a multi-step plan
+                        // (argument passing, postconditions, atomic undo).
+                        if let plan = ToolCallParser.plan(from: output, goal: prompt) {
+                            let outcome = PlanExecutor(toolbox: toolbox).execute(plan)
+                            for event in outcome.events { continuation.yield(event) }
+                            transcript = "<tool_response>\n\(outcome.message)\n</tool_response>"
+                            continue
+                        }
                         guard let call = ToolCallParser.parse(output) else {
                             aggregated = output
                             break
@@ -119,6 +127,9 @@ final class MLXBackend: ModelBackend {
         \(toolJSON)
         To call one, reply with exactly:
         <tool_call>{"name": "toolName", "arguments": {"param": "value"}}</tool_call>
+        For a request with several actions, emit one <tool_call> per action in
+        order; use "$N" as an argument to refer to what call N created
+        (e.g. {"project": "$1"}).
         After receiving <tool_response>, answer the user in plain prose.
         """
     }
