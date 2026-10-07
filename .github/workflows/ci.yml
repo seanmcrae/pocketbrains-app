@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan tracked files for paths, credentials and large binaries
+        run: ./scripts/check-hygiene.sh
+
+  ios:
+    name: Build and test (iOS 26 Simulator)
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      # Tests run serialized: SwiftData containers and the paced agent streams
+      # are MainActor-bound, and parallel suites made crash logs unreadable.
+      - name: Build and test
+        run: |
+          set -o pipefail
+          DEVICE="$(xcrun simctl list devices available | grep -Eo 'iPhone [^(]+' | head -1 | xargs)"
+          echo "Using simulator: $DEVICE"
+          xcodebuild test \
+            -project PocketBrains.xcodeproj \
+            -scheme PocketBrains \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
+            -configuration Debug \
+            -parallel-testing-enabled NO \
+            -maximum-parallel-testing-workers 1 \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log
+
+      - name: Summarize results
+        if: always()
+        run: |
+          {
+            echo "### iOS test results"
+            grep -E 'Test run with [0-9]+ tests' build.log | tail -1 || echo "No Swift Testing summary found."
+            echo
+            echo "### Intent-router eval"
+            echo '```'
+            grep -E '^EVAL' build.log | sed 's/^EVAL //' || echo "Eval output not found."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect simulator crash reports
+        if: failure()
+        run: |
+          mkdir -p crash-reports
+          cp ~/Library/Logs/DiagnosticReports/*.ips crash-reports/ 2>/dev/null || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: |
+            build.log
+            crash-reports/
+          if-no-files-found: ignore

@@ -1,0 +1,34 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: utterance
+    attributes:
+      label: Prompt (if the agent was involved)
+      description: The exact words you typed. Please remove anything personal.
+  - type: dropdown
+    id: brain
+    attributes:
+      label: Brain in use (Settings, Intelligence)
+      options:
+        - Apple Intelligence (on-device)
+        - Quick intents (offline)
+        - MLX (custom build)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Device and iOS version
+      placeholder: iPhone 16 Pro, iOS 26.1 / iPhone 17 Pro simulator
+    validations:
+      required: true

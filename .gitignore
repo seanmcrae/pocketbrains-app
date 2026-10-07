@@ -1,0 +1,19 @@
+# Xcode / XcodeGen (the project is generated from project.yml)
+*.xcodeproj
+xcuserdata/
+DerivedData/
+/Support/Info.plist
+build.log
+
+# Swift Package Manager
+*.swiftpm
+.build/
+
+# macOS
+.DS_Store
+
+# Local secrets and signing material: never commit these
+*.p12
+*.mobileprovision
+*.xcconfig.local
+.env
