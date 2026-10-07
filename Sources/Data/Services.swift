@@ -10,6 +10,7 @@ struct DataServices {
     let projects: ProjectService
     let notes: NoteService
     let graph: GraphService
+    let journal: JournalService
 
     init(context: ModelContext) {
         self.context = context
@@ -17,6 +18,7 @@ struct DataServices {
         self.projects = ProjectService(context: context)
         self.notes = NoteService(context: context)
         self.graph = GraphService(context: context)
+        self.journal = JournalService(context: context)
     }
 }
 
@@ -78,9 +80,27 @@ struct TaskService {
     }
 
     func find(matching query: String) -> TaskItem? {
+        if let id = EntityRef.id(from: query) { return find(id: id) }
         let q = query.lowercased()
+        guard !q.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         return all(includeDone: true)
             .first { $0.title.lowercased().contains(q) || q.contains($0.title.lowercased()) }
+    }
+
+    func find(id: UUID) -> TaskItem? {
+        context.fetchAll(TaskItem.self).first { $0.id == id }
+    }
+
+    /// Put a task's fields back to a snapshot (undo of an update).
+    func restore(_ task: TaskItem, to snapshot: TaskSnapshot, project: Project?) {
+        task.title = snapshot.title
+        task.details = snapshot.details
+        task.dueDate = snapshot.dueDate
+        task.priorityRaw = snapshot.priorityRaw
+        task.project = project
+        task.completedAt = snapshot.completedAt
+        try? context.save()
+        NotificationPlanner.sync(tasks: all())
     }
 
     func dueToday() -> [TaskItem] {
@@ -119,7 +139,9 @@ struct ProjectService {
     }
 
     func find(matching query: String) -> Project? {
+        if let id = EntityRef.id(from: query) { return find(id: id) }
         let q = query.lowercased()
+        guard !q.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         return all().first { $0.name.lowercased().contains(q) || q.contains($0.name.lowercased()) }
     }
 
@@ -129,6 +151,37 @@ struct ProjectService {
         context.insert(m)
         try? context.save()
         return m
+    }
+
+    func find(id: UUID) -> Project? {
+        context.fetchAll(Project.self).first { $0.id == id }
+    }
+
+    func milestone(id: UUID) -> Milestone? {
+        context.fetchAll(Milestone.self).first { $0.id == id }
+    }
+
+    /// Milestones for a project, soonest target first; undated last.
+    func milestones(of project: Project) -> [Milestone] {
+        (project.milestones ?? []).sorted {
+            ($0.targetDate ?? .distantFuture) < ($1.targetDate ?? .distantFuture)
+        }
+    }
+
+    func deleteMilestone(_ milestone: Milestone) {
+        context.delete(milestone)
+        try? context.save()
+    }
+
+    /// Deletes the project; its tasks and notes are kept and simply unfiled.
+    func delete(_ project: Project) {
+        for task in project.tasks ?? [] { task.project = nil }
+        for milestone in project.milestones ?? [] { context.delete(milestone) }
+        for note in context.fetchAll(Note.self) where note.project?.id == project.id {
+            note.project = nil
+        }
+        context.delete(project)
+        try? context.save()
     }
 
     func setStatus(_ project: Project, _ status: ProjectStatus) {
@@ -175,8 +228,26 @@ struct NoteService {
     }
 
     func find(matching query: String) -> Note? {
+        if let id = EntityRef.id(from: query) { return find(id: id) }
         let q = query.lowercased()
+        guard !q.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         return all().first { $0.title.lowercased().contains(q) || q.contains($0.title.lowercased()) }
+    }
+
+    func find(id: UUID) -> Note? {
+        context.fetchAll(Note.self).first { $0.id == id }
+    }
+
+    /// Replace a note's body (UI edits and undo of an append).
+    func setBody(_ note: Note, _ body: String) {
+        note.body = body
+        note.modifiedAt = .now
+        try? context.save()
+    }
+
+    func delete(_ note: Note) {
+        context.delete(note)
+        try? context.save()
     }
 
     /// Plain keyword search; semantic search lives in SemanticIndex and is
@@ -219,6 +290,21 @@ struct GraphService {
         return link
     }
 
+    func link(id: UUID) -> KnowledgeLink? {
+        allLinks().first { $0.id == id }
+    }
+
+    func delete(_ link: KnowledgeLink) {
+        context.delete(link)
+        try? context.save()
+    }
+
+    /// Remove every edge touching an entity (used when the entity goes away).
+    func unlinkAll(touching id: UUID) {
+        for link in links(touching: id) { context.delete(link) }
+        try? context.save()
+    }
+
     func allLinks() -> [KnowledgeLink] {
         context.fetchAll(KnowledgeLink.self)
     }
@@ -256,5 +342,47 @@ struct GraphService {
         case .note: context.fetchAll(Note.self).first { $0.id == id }?.title
         case .milestone: context.fetchAll(Milestone.self).first { $0.id == id }?.title
         }
+    }
+}
+
+
+// MARK: - Action journal
+
+@MainActor
+struct JournalService {
+    let context: ModelContext
+
+    @discardableResult
+    func record(tool: String, summary: String, group: String,
+                inverse: [InverseStep]) -> JournalEntry {
+        let entry = JournalEntry(groupID: group, toolName: tool, summary: summary, inverse: inverse)
+        context.insert(entry)
+        try? context.save()
+        return entry
+    }
+
+    /// Newest first.
+    func all() -> [JournalEntry] {
+        context.fetchAll(JournalEntry.self, sortBy: [.init(\.createdAt, order: .reverse)])
+    }
+
+    func entry(id: UUID) -> JournalEntry? {
+        all().first { $0.id == id }
+    }
+
+    /// The most recent action that has not been undone yet.
+    func lastUndoable() -> JournalEntry? {
+        all().first { !$0.isUndone }
+    }
+
+    /// Live (not yet undone) entries of a group, newest first.
+    func pending(inGroup group: String) -> [JournalEntry] {
+        all().filter { $0.groupID == group && !$0.isUndone }
+    }
+
+    func markUndone(_ entries: [JournalEntry]) {
+        let now = Date.now
+        for entry in entries { entry.undoneAt = now }
+        try? context.save()
     }
 }

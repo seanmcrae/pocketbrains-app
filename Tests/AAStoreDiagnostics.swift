@@ -59,6 +59,12 @@ struct AAStoreDiagnostics {
         try context.save()
         print("DIAG task packedData ok")
 
+        // 7. v0.2 journal: String + Data + Date? + unique UUID.
+        context.insert(JournalEntry(groupID: "diag", toolName: "createTask", summary: "diag",
+                                    inverse: [.init(kind: .deleteTask, id: task.id)]))
+        try context.save()
+        print("DIAG journalEntry ok")
+
         let fetched = context.fetchAll(TaskItem.self,
                                        sortBy: [.init(\.createdAt, order: .reverse)])
         print("DIAG sorted fetch ok count=\(fetched.count)")
