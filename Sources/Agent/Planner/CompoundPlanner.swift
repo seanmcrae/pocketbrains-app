@@ -29,7 +29,7 @@ enum CompoundPlanner {
         let clauses = split(utterance)
         var intents: [ParsedIntent] = []
 
-        for (index, clause) in clauses.enumerated() {
+        for clause in clauses {
             let anchorName = intents.indices.reversed()
                 .first { intents[$0].tool == "createProject" }
                 .flatMap { intents[$0].arguments["name"] }
@@ -38,9 +38,9 @@ enum CompoundPlanner {
                 continue
             }
             let parsed = IntentGrammar.parse(clause)
-            // An unrecognized trailing clause is not a new command: keep the
-            // request single rather than inventing a plan around it.
-            if parsed.isDefault && index > 0 { return nil }
+            // A clause nothing recognizes ("never mind, undo that") is not a
+            // step: keep the request single rather than inventing a plan.
+            if parsed.isDefault { return nil }
             intents.append(parsed)
         }
         guard intents.count >= 2 else { return nil }
