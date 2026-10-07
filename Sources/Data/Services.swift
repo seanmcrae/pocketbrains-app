@@ -36,6 +36,7 @@ struct TaskService {
         context.insert(task)
         try? context.save()
         NotificationPlanner.sync(tasks: all())
+        WidgetPublisher.publish(services: DataServices(context: context))
         return task
     }
 
@@ -43,12 +44,14 @@ struct TaskService {
         task.completedAt = .now
         try? context.save()
         NotificationPlanner.sync(tasks: all())
+        WidgetPublisher.publish(services: DataServices(context: context))
     }
 
     func reopen(_ task: TaskItem) {
         task.completedAt = nil
         try? context.save()
         NotificationPlanner.sync(tasks: all())
+        WidgetPublisher.publish(services: DataServices(context: context))
     }
 
     func update(_ task: TaskItem, title: String? = nil, details: String? = nil,
@@ -60,12 +63,14 @@ struct TaskService {
         if let project { task.project = project }
         try? context.save()
         NotificationPlanner.sync(tasks: all())
+        WidgetPublisher.publish(services: DataServices(context: context))
     }
 
     func delete(_ task: TaskItem) {
         context.delete(task)
         try? context.save()
         NotificationPlanner.sync(tasks: all())
+        WidgetPublisher.publish(services: DataServices(context: context))
     }
 
     func addDependency(_ task: TaskItem, blockedBy blocker: TaskItem) {
@@ -101,6 +106,7 @@ struct TaskService {
         task.completedAt = snapshot.completedAt
         try? context.save()
         NotificationPlanner.sync(tasks: all())
+        WidgetPublisher.publish(services: DataServices(context: context))
     }
 
     func dueToday() -> [TaskItem] {
