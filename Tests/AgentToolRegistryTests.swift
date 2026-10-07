@@ -25,13 +25,13 @@ struct AgentToolRegistryTests {
         let (box, container) = makeBox()
         defer { withExtendedLifetime(container) {} }
         let names = AgentToolRegistry.all(toolbox: box).map(\.name)
-        #expect(names.count == 15)
+        #expect(names.count == 17)
         #expect(Set(names).count == names.count)
         #expect(Set(names) == [
             "createTask", "completeTask", "updateTask", "queryTasks",
             "createProject", "projectStatus", "addMilestone",
             "createNote", "searchNotes", "askNotes", "notesFrom", "linkItems",
-            "agenda", "recall", "undo",
+            "agenda", "recall", "undo", "calendarAgenda", "exportToReminders",
         ])
     }
 
