@@ -29,9 +29,10 @@ struct IntentRouterEval {
         let latency: Duration
     }
 
-    /// Splits that must score 100% end-to-end (the regression gate).
+    /// Splits that must score 100% end-to-end (the regression gate): the
+    /// documented phrasing, single-step and multi-step.
     static func isGated(_ testCase: IntentEvalCase) -> Bool {
-        testCase.category == .canonical && testCase.origin == .v1
+        testCase.category == .canonical || testCase.category == .compound
     }
 
     static func seed(_ box: ToolBox) {
@@ -238,7 +239,8 @@ struct IntentRouterEval {
         print(String(format: "EVAL routing + tool execution latency (in-memory store, CI simulator): p50 %.2f ms, p95 %.2f ms",
                      p50 / 1000, p95 / 1000))
 
-        // Regression gate: canonical phrasing is the router's contract.
+        // Regression gate: canonical phrasing (and the documented compound
+        // forms) is the router's contract.
         // Paraphrases are reported, not gated: tuning rules until they pass
         // would overfit, and paraphrase is the language model's job.
         for miss in outcomes where Self.isGated(miss.testCase) && !miss.endToEnd {
