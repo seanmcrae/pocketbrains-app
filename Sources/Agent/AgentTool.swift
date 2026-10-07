@@ -107,6 +107,10 @@ enum AgentToolRegistry {
                   description: "Search past conversation history and completed work.",
                   parameters: [.init(name: "query", description: "What to remember", required: true)],
                   run: { toolbox.recall(query: $0["query"] ?? "") }),
+            .init(name: "undo",
+                  description: "Undo the last thing the agent changed: the whole last request (turn) or only the last action (step).",
+                  parameters: [.init(name: "scope", description: "turn | step")],
+                  run: { toolbox.undo(scope: $0["scope"]) }),
         ]
     }
 }

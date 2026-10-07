@@ -21,17 +21,17 @@ struct AgentToolRegistryTests {
         try #require(AgentToolRegistry.all(toolbox: box).first { $0.name == name })
     }
 
-    @Test func exposesTheThirteenDocumentedTools() {
+    @Test func exposesTheDocumentedTools() {
         let (box, container) = makeBox()
         defer { withExtendedLifetime(container) {} }
         let names = AgentToolRegistry.all(toolbox: box).map(\.name)
-        #expect(names.count == 13)
+        #expect(names.count == 14)
         #expect(Set(names).count == names.count)
         #expect(Set(names) == [
             "createTask", "completeTask", "updateTask", "queryTasks",
             "createProject", "projectStatus", "addMilestone",
             "createNote", "searchNotes", "notesFrom", "linkItems",
-            "agenda", "recall",
+            "agenda", "recall", "undo",
         ])
     }
 
