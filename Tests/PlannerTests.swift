@@ -44,7 +44,7 @@ struct PlannerTests {
         #expect(plan.steps[0].arguments["name"] == "Launch")
         for step in plan.steps[1...3] {
             #expect(step.arguments["project"] == "$1")
-            #expect(step.arguments["due"] == "friday")
+            #expect(step.arguments["due"] == "for friday") // the exact phrase, preposition included
         }
         #expect(plan.steps[1].arguments["title"] == "Launch task 1")
         #expect(plan.steps[4].arguments["from"] == "$1")
@@ -55,7 +55,7 @@ struct PlannerTests {
     @Test func expandsAnExplicitTaskList() throws {
         let plan = try #require(CompoundPlanner.plan("Add tasks: draft copy, book venue and send invites for Friday"))
         #expect(plan.steps.map { $0.arguments["title"] } == ["Draft copy", "Book venue", "Send invites"])
-        #expect(plan.steps.allSatisfy { $0.arguments["due"] == "friday" })
+        #expect(plan.steps.allSatisfy { $0.arguments["due"] == "for friday" })
     }
 
     @Test func referenceResolution() {
