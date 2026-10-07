@@ -181,6 +181,13 @@ struct ToolActivityCard: View {
     static func icon(for tool: String) -> String {
         switch tool {
         case "createTask", "updateTask": "circle.badge.plus"
+        case "rescheduleTask", "snoozeTask": "calendar.badge.clock"
+        case "setPriority": "flag"
+        case "setRecurrence": "repeat"
+        case "listMilestones": "flag.checkered"
+        case "searchEverything": "magnifyingglass"
+        case "calendarAgenda": "calendar"
+        case "exportToReminders": "checklist"
         case "completeTask": "checkmark.circle"
         case "queryTasks", "agenda": "sun.horizon"
         case "createProject", "projectStatus", "addMilestone": "square.stack"
@@ -197,8 +204,10 @@ struct ToolActivityCard: View {
 
     static func hue(for tool: String) -> Color {
         switch tool {
-        case "createTask", "updateTask", "completeTask", "queryTasks", "agenda": DomainHue.task
-        case "createProject", "projectStatus", "addMilestone": lumen
+        case "createTask", "updateTask", "completeTask", "queryTasks", "agenda",
+             "rescheduleTask", "snoozeTask", "setPriority", "setRecurrence",
+             "calendarAgenda", "exportToReminders": DomainHue.task
+        case "createProject", "projectStatus", "addMilestone", "listMilestones": lumen
         case "createNote", "appendNote", "searchNotes", "notesFrom", "askNotes": DomainHue.note
         case "linkItems", "recall": DomainHue.knowledge
         default: lumen

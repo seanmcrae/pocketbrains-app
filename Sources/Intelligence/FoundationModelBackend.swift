@@ -184,6 +184,13 @@ final class FoundationModelBackend: ModelBackend {
             RecallTool(toolbox: toolbox, sink: sink),
             UndoTool(toolbox: toolbox, sink: sink),
             AskNotesTool(toolbox: toolbox, sink: sink),
+            RescheduleTaskTool(toolbox: toolbox, sink: sink),
+            SnoozeTaskTool(toolbox: toolbox, sink: sink),
+            SetPriorityTool(toolbox: toolbox, sink: sink),
+            SetRecurrenceTool(toolbox: toolbox, sink: sink),
+            ListMilestonesTool(toolbox: toolbox, sink: sink),
+            AppendNoteTool(toolbox: toolbox, sink: sink),
+            SearchEverythingTool(toolbox: toolbox, sink: sink),
         ]
     }
 }
@@ -252,12 +259,15 @@ private struct CreateTaskTool: Tool {
         let priority: String?
         @Guide(description: "Name of the project to file this under")
         let project: String?
+        @Guide(description: "Repeat rule if recurring: daily, weekdays, weekly, every other Monday, every 3 days")
+        let repeats: String?
     }
 
     func call(arguments: Arguments) async throws -> String {
         await sink.perform(name, "Creating task") {
             toolbox.createTask(title: arguments.title, due: arguments.due,
-                               priority: arguments.priority, projectName: arguments.project)
+                               priority: arguments.priority, projectName: arguments.project,
+                               repeats: arguments.repeats)
         }
     }
 }
@@ -547,6 +557,151 @@ private struct ExportToRemindersTool: Tool {
     func call(arguments: Arguments) async throws -> String {
         await sink.perform(name, "Exporting to Reminders") {
             toolbox.exportToReminders(scope: arguments.scope)
+        }
+    }
+}
+
+private struct RescheduleTaskTool: Tool {
+    let name = "rescheduleTask"
+    let description = "Move a task's due date to a new date, or shift it by an amount."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Words from the task's title")
+        let query: String
+        @Guide(description: "New date in natural language, e.g. 'next Tuesday', 'end of month'")
+        let to: String?
+        @Guide(description: "Relative shift, e.g. '2 days', 'a week'")
+        let by: String?
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Rescheduling") {
+            toolbox.rescheduleTask(query: arguments.query, to: arguments.to, by: arguments.by)
+        }
+    }
+}
+
+private struct SnoozeTaskTool: Tool {
+    let name = "snoozeTask"
+    let description = "Snooze a task until later; defaults to tomorrow."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Words from the task's title")
+        let query: String
+        @Guide(description: "'tomorrow', '3 days', 'a week' or 'until Monday'")
+        let until: String?
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Snoozing") {
+            toolbox.snoozeTask(query: arguments.query, until: arguments.until)
+        }
+    }
+}
+
+private struct SetPriorityTool: Tool {
+    let name = "setPriority"
+    let description = "Set a task's priority."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Words from the task's title")
+        let query: String
+        @Guide(description: "low, normal, high, or urgent")
+        let priority: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Setting priority") {
+            toolbox.setPriority(query: arguments.query, priority: arguments.priority)
+        }
+    }
+}
+
+private struct SetRecurrenceTool: Tool {
+    let name = "setRecurrence"
+    let description = "Make a task repeat, or stop it repeating with 'none'."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Words from the task's title")
+        let query: String
+        @Guide(description: "daily, weekdays, weekly, every other Monday, every 3 days, or none")
+        let rule: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Setting repeat") {
+            toolbox.setRecurrence(query: arguments.query, rule: arguments.rule)
+        }
+    }
+}
+
+private struct ListMilestonesTool: Tool {
+    let name = "listMilestones"
+    let description = "List a project's milestones and target dates."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Project name")
+        let projectName: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Milestones") {
+            toolbox.listMilestones(projectName: arguments.projectName)
+        }
+    }
+}
+
+private struct AppendNoteTool: Tool {
+    let name = "appendNote"
+    let description = "Add text to the end of an existing note."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Words from the note's title")
+        let query: String
+        @Guide(description: "Text to append")
+        let text: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Writing note") {
+            toolbox.appendNote(query: arguments.query, text: arguments.text)
+        }
+    }
+}
+
+private struct SearchEverythingTool: Tool {
+    let name = "searchEverything"
+    let description = "Search tasks, projects and notes at once."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "What to look for")
+        let query: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Searching") {
+            toolbox.searchEverything(query: arguments.query)
         }
     }
 }
