@@ -12,10 +12,13 @@ struct ToolResult {
     /// Structured outputs later plan steps can reference: `ref` (an exact
     /// `id:<uuid>` reference), `kind`, `title`, and tool-specific keys.
     var outputs: [String: String] = [:]
+    /// Sources behind a cited answer (askNotes).
+    var citations: [Citation] = []
 
     func record(toolName: String) -> ToolEventRecord {
         .init(toolName: toolName, summary: summary, detail: detail,
-              succeeded: succeeded, journalID: journalID)
+              succeeded: succeeded, journalID: journalID,
+              citations: citations.isEmpty ? nil : citations)
     }
 }
 
@@ -27,6 +30,8 @@ struct ToolResult {
 final class ToolBox {
     let services: DataServices
     let semanticIndex: SemanticIndex
+    /// Passage index behind "Ask your notes".
+    let notesIndex: NotesRAG
 
     /// Journal group for the current turn or plan. The orchestrator sets a
     /// fresh value per turn so "undo that" reverts everything the turn did;
@@ -36,6 +41,7 @@ final class ToolBox {
     init(services: DataServices, semanticIndex: SemanticIndex) {
         self.services = services
         self.semanticIndex = semanticIndex
+        self.notesIndex = NotesRAG(context: services.context, embedder: semanticIndex)
     }
 
     /// Record an inverse for a mutation and return the journal id.
@@ -196,6 +202,7 @@ final class ToolBox {
         let project = projectName.flatMap { services.projects.find(matching: $0) }
         let note = services.notes.create(title: title, body: body, tags: tags, project: project)
         semanticIndex.index(note: note)
+        notesIndex.upsert(note)
         if let project {
             services.graph.link(from: (.note, note.id), to: (.project, project.id), relation: "belongs-to")
         }
@@ -223,6 +230,7 @@ final class ToolBox {
         let previous = note.body
         services.notes.append(note, text: text)
         semanticIndex.index(note: note)
+        notesIndex.upsert(note)
         let summary = "Appended to “\(note.title)”"
         let jid = journal("appendNote", summary, [.init(kind: .restoreNoteBody, id: note.id, text: previous)])
         return ToolResult(summary: summary,
@@ -241,6 +249,30 @@ final class ToolBox {
         let lines = merged.prefix(6).map { "• \($0.title): \($0.body.prefix(140))" }
         return ToolResult(summary: "\(merged.count) note\(merged.count == 1 ? "" : "s") found",
                           detail: lines.joined(separator: "\n"))
+    }
+
+    /// Answer a question from the user's notes, with [n] citations.
+    /// `detail` carries the extractive answer plus the numbered source
+    /// passages, so a language model can write its own grounded reply.
+    func askNotes(question: String) -> ToolResult {
+        let chunks = notesIndex.retrieve(question, k: 4)
+        guard !chunks.isEmpty else {
+            return ToolResult(summary: "Nothing in your notes on that",
+                              detail: "No notes mention “\(question)”. Say so plainly; don't guess.")
+        }
+        let answer = CitedAnswerComposer.compose(question: question, chunks: chunks)
+        let sources = CitedAnswerComposer.groundingContext(chunks: chunks, citations: answer.citations)
+        let count = answer.citations.count
+        return ToolResult(
+            summary: "Answered from \(count) note\(count == 1 ? "" : "s")",
+            detail: """
+            \(answer.text)
+
+            Sources (answer only from these; cite inline as [n]):
+            \(sources)
+            """,
+            outputs: ["answer": answer.text],
+            citations: answer.citations)
     }
 
     func notesFrom(dayDescription: String) -> ToolResult {

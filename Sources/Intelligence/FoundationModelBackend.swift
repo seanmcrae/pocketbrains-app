@@ -170,6 +170,7 @@ final class FoundationModelBackend: ModelBackend {
             AgendaTool(toolbox: toolbox, sink: sink),
             RecallTool(toolbox: toolbox, sink: sink),
             UndoTool(toolbox: toolbox, sink: sink),
+            AskNotesTool(toolbox: toolbox, sink: sink),
         ]
     }
 }
@@ -476,6 +477,25 @@ private struct AgendaTool: Tool {
     func call(arguments: Arguments) async throws -> String {
         await sink.perform(name, "Composing agenda") {
             toolbox.agenda()
+        }
+    }
+}
+
+private struct AskNotesTool: Tool {
+    let name = "askNotes"
+    let description = "Answer a question from the user's own notes. Returns numbered source passages; answer only from them and cite inline as [n]."
+    let toolbox: ToolBox
+    let sink: ToolEventSink
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "The user's question")
+        let question: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await sink.perform(name, "Reading your notes") {
+            toolbox.askNotes(question: arguments.question)
         }
     }
 }

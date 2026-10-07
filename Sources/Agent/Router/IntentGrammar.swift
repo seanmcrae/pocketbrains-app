@@ -45,6 +45,11 @@ enum IntentGrammar {
         // Undo
         if let undo = parseUndo(lower) { return undo }
 
+        // Ask your notes (cited Q&A) — before the agenda's "what do i…".
+        if let question = askNotesQuestion(prompt) {
+            return ParsedIntent(tool: "askNotes", arguments: ["question": question])
+        }
+
         // Agenda
         if lower.contains("agenda") || lower.contains("what's today") || lower.contains("what do i")
             || lower.contains("needs my attention") || (lower.contains("today") && lower.contains("due")) {
@@ -124,6 +129,21 @@ enum IntentGrammar {
         guard starts.contains(where: { trimmed == $0 || trimmed.hasPrefix($0 + " ") }) else { return nil }
         let scope = UndoEngine.Scope.from(trimmed)
         return ParsedIntent(tool: "undo", arguments: ["scope": scope.rawValue])
+    }
+
+    /// "what do my notes say about X", "ask my notes X", "according to my
+    /// notes, X?", "do my notes mention X", "what did I write about X".
+    static func askNotesQuestion(_ prompt: String) -> String? {
+        let lower = prompt.lowercased()
+        let prefixes = ["what do my notes say about", "what do my notes say", "what did my notes say about",
+                        "what do my notes tell me about", "ask my notes about", "ask my notes",
+                        "according to my notes,", "according to my notes", "do my notes mention",
+                        "do my notes say", "what did i write about", "what have i written about",
+                        "what did i note about", "check my notes for", "from my notes,"]
+        guard let prefix = prefixes.first(where: { lower.hasPrefix($0) }) else { return nil }
+        let rest = String(prompt.dropFirst(prefix.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        return rest.isEmpty ? nil : rest
     }
 
     // MARK: - Helpers

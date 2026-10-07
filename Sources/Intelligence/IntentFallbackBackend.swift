@@ -115,6 +115,10 @@ final class IntentFallbackBackend: ModelBackend {
         case "notesFrom": return extractiveSummary(of: r.detail)
         case "linkItems": return r.succeeded ? "\(r.summary)." : r.detail
         case "createProject": return "\(r.summary). It's waiting in your Projects space."
+        case "askNotes":
+            guard let answer = r.outputs["answer"], !r.citations.isEmpty else { return r.summary + "." }
+            let sources = r.citations.map { "[\($0.index)] \($0.title)" }.joined(separator: " · ")
+            return "\(answer)\n\nSources: \(sources)"
         default: return r.detail
         }
     }
