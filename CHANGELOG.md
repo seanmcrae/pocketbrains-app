@@ -7,6 +7,55 @@ has not been released; versions refer to `MARKETING_VERSION` in
 
 ## [Unreleased]
 
+## [0.3.0] - Unreleased
+
+Pull request "PocketBrains v0.3: honest generalization, tool trimming,
+RAG eval, docs site". Eval numbers, with the CI runs they come from, are in
+the README; none are claimed for Foundation Models or MLX.
+
+### Added
+- **Eval splits for honest generalization.** A new 53-utterance v0.3
+  held-out paraphrase split (`Tests/Eval/HeldOutV3.swift`), committed and
+  measured before any router change and never used for tuning; a
+  51-utterance v0.3 dev split (`DevParaphrasesV3.swift`), the only split
+  v0.3 tuned on. The v0.2 held-out split is frozen as "v0.2 held-out
+  (reported)". Misses on both held-out splits are counted, never itemized.
+- **Router constructions (`ParaphraseFrames`).** Statements of state,
+  subject-first requests, labelled captures, reminders asked for as nouns,
+  past-tense reports of work, quoted text into a named note, verbless
+  project status, list states and a factual-question fallback to
+  `askNotes`; leading interjections are dropped. Lexicon: tick, slip,
+  kick, park, hide, pencil.
+- **`ToolSelector`.** Deterministic per-request tool trimming for the
+  Foundation Models brain: grammar parse, lexicon verbs, cue words and
+  dates score each tool; `createTask`, `searchEverything`, `agenda` and
+  `undo` are always offered; at most 8 tools. Wired into
+  `FoundationModelBackend` behind Settings, Intelligence, "Focused tool
+  list" (off by default). Eval: recall@6 and recall@8 per split.
+- **RAG eval.** 61 synthetic questions over a 22-note synthetic fixture:
+  BM25 recall@1 and @3, answer-span hit rate, citation faithfulness (every
+  `[n]` maps to a retrieved passage of note n containing the cited
+  sentence) and span attribution; semantic and hybrid in a separate CI
+  step that reports "skipped" when the embedding asset is unavailable.
+- **Docs site** for GitHub Pages: `scripts/build_site.py` renders an
+  overview, eval tables parsed from CI `EVALJSON` lines, architecture,
+  product brief and verification pages; `.github/workflows/pages.yml`
+  publishes after CI succeeds on `main`.
+- `ROADMAP.md` linked to six labelled roadmap issues (#5 to #10), a
+  "routing miss" issue template, grouped Dependabot updates for actions.
+
+### Changed
+- "Push send the invoice to Monday" now expects `rescheduleTask` (was
+  `updateTask`) and checks the task lands on Monday. v0.1 had no reschedule
+  tool; v0.2 added one for exactly this request. The router did not change.
+- The Reminders export check runs before the command frames; "do" is no
+  longer a completion verb (it read questions as completions).
+- CI triggers are explicit (`push` to `main`, `pull_request` to `main`,
+  manual dispatch); the hygiene job also builds the docs site.
+- `SemanticIndex` takes `allowUnderTests` so the embedding eval can opt in.
+- `SECURITY.md` covers the integrations and the widget snapshot.
+- `MARKETING_VERSION` 0.3.0.
+
 ## [0.2.0] - 2026-10-07
 
 Pull request "PocketBrains v2: multi-step agent, cited note Q&A, system
@@ -85,7 +134,7 @@ integrations, smarter tools". Not released to users.
   it now reads `snapshot.content`.
 - `find(matching:)` no longer matches every task for an empty query.
 
-### Added
+### Added (repository polish before the v0.2 work)
 - Reproducible tool-calling eval for the deterministic router
   (`Tests/Eval`): synthetic 40-utterance corpus, tool and end-to-end
   accuracy, latency, results in the CI job summary and README.
@@ -98,18 +147,18 @@ integrations, smarter tools". Not released to users.
 - `docs/PRODUCT.md`, rewritten `docs/ARCHITECTURE.md` and `README.md`,
   `SECURITY.md`, `CONTRIBUTING.md`, issue and pull request templates.
 
-### Fixed
+### Fixed (repository polish before the v0.2 work)
 - Router: explicit capture commands ("remind me…", "add a task…",
   "note…") now take precedence over keyword rules, so "remind me to
   finish the deck" creates a task instead of completing one.
 - Router: "in N days" no longer leaks into task titles.
 - Router: "notes about X" searches instead of creating a note.
 
-### Changed
+### Changed (repository polish before the v0.2 work)
 - CI no longer force-pushes failure logs to a `ci-log` branch and runs
   with read-only repository permissions.
 
-### Removed
+### Removed (repository polish before the v0.2 work)
 - A machine-specific sync script containing an absolute local path.
 - The CC0 public-domain dedication, pending a licensing decision.
 
