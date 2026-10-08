@@ -54,6 +54,7 @@ jobs:
           set -o pipefail
           DEVICE="$(xcrun simctl list devices available | grep -Eo 'iPhone [^(]+' | head -1 | xargs)"
           echo "Using simulator: $DEVICE"
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
           xcodebuild test \
             -project PocketBrains.xcodeproj \
             -scheme PocketBrains \
@@ -63,6 +64,24 @@ jobs:
             -maximum-parallel-testing-workers 1 \
             CODE_SIGNING_ALLOWED=NO \
             | tee build.log
+
+      # Semantic and hybrid retrieval need the NLEmbedding sentence asset,
+      # which the main run never loads (it once destabilized asset-less
+      # simulators). Run that eval alone, after the main suite, so an asset
+      # problem can only cost these numbers, never the build.
+      - name: Embedding eval (semantic and hybrid retrieval)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          TEST_RUNNER_PB_EMBEDDING_EVAL=1 xcodebuild test-without-building \
+            -project PocketBrains.xcodeproj \
+            -scheme PocketBrains \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
+            -configuration Debug \
+            -only-testing:PocketBrainsTests/RAGEval \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build-embedding.log
 
       - name: Summarize results
         if: always()
@@ -74,6 +93,11 @@ jobs:
             echo "### Intent-router eval"
             echo '```'
             grep -E '^EVAL ' build.log | sed 's/^EVAL //' || echo "Eval output not found."
+            echo '```'
+            echo
+            echo "### Embedding eval (separate step)"
+            echo '```'
+            grep -E '^EVAL rag' build-embedding.log 2>/dev/null | sed 's/^EVAL //' || echo "Embedding eval did not run or printed nothing."
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -90,5 +114,6 @@ jobs:
           name: ios-build-log
           path: |
             build.log
+            build-embedding.log
             crash-reports/
           if-no-files-found: ignore
