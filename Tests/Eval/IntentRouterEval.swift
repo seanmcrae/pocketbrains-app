@@ -194,14 +194,43 @@ struct IntentRouterEval {
         let toolNames = Set(AgentToolRegistry.all(toolbox: box).map(\.name))
         let utterances = IntentEvalCorpus.cases.map(\.utterance)
         #expect(Set(utterances).count == utterances.count, "duplicate utterances")
-        #expect(IntentEvalCorpus.cases.count >= 120)
         #expect(IntentEvalCorpus.v1.count == 40)
+        #expect(IntentEvalCorpus.heldout.count == 34, "v0.2 held-out is frozen")
+        #expect(IntentEvalCorpus.heldoutV3.count >= 40)
+        #expect(IntentEvalCorpus.devV3.count >= 40)
+        #expect(IntentEvalCorpus.heldoutV3.allSatisfy { $0.category == .heldout && $0.origin == .v3 })
+        #expect(IntentEvalCorpus.devV3.allSatisfy { $0.category == .paraphrase && $0.origin == .v3 })
         for testCase in IntentEvalCorpus.cases {
             #expect(toolNames.contains(testCase.tool), "unknown tool \(testCase.tool)")
             for step in testCase.steps ?? [] {
                 #expect(toolNames.contains(step), "unknown step tool \(step)")
             }
         }
+    }
+
+    /// Named report splits, in print order. Every case belongs to exactly one.
+    static let splits: [(label: String, contains: (IntentEvalCase) -> Bool)] = [
+        ("v1 canonical", { $0.origin == .v1 && $0.category == .canonical }),
+        ("v1 paraphrase", { $0.origin == .v1 && $0.category == .paraphrase }),
+        ("v2 canonical", { $0.origin == .v2 && $0.category == .canonical }),
+        ("v2 compound", { $0.origin == .v2 && $0.category == .compound }),
+        ("v2 dev paraphrase", { $0.origin == .v2 && $0.category == .paraphrase }),
+        ("v0.2 held-out (reported)", { $0.origin == .v2 && $0.category == .heldout }),
+        ("v0.3 dev paraphrase", { $0.origin == .v3 && $0.category == .paraphrase }),
+        ("v0.3 held-out (frozen)", { $0.origin == .v3 && $0.category == .heldout }),
+    ]
+
+    /// One machine-readable line per result, for the docs-site generator.
+    static func json(_ fields: [(String, Any)]) -> String {
+        let body = fields.map { field -> String in
+            let (key, value) = field
+            switch value {
+            case let text as String: return "\"\(key)\":\"\(text)\""
+            case let number as Double: return "\"\(key)\":" + String(format: "%.6f", number)
+            default: return "\"\(key)\":\(value)"
+            }
+        }.joined(separator: ",")
+        return "EVALJSON {" + body + "}"
     }
 
     @Test func routerEval() {
@@ -211,24 +240,23 @@ struct IntentRouterEval {
         func pad(_ text: String, _ width: Int) -> String {
             text.padding(toLength: max(width, text.count), withPad: " ", startingAt: 0)
         }
-        func row(_ label: String, _ subset: [Outcome]) -> String {
+        func row(_ label: String, _ subset: [Outcome]) {
             let tool = Self.percent(subset.filter(\.toolCorrect).count, subset.count)
             let e2e = Self.percent(subset.filter(\.endToEnd).count, subset.count)
-            return "EVAL " + pad(label, 20) + " | " + pad(String(subset.count), 3) + " | " + pad(tool, 13) + " | " + e2e
+            print("EVAL " + pad(label, 26) + " | " + pad(String(subset.count), 3) + " | " + pad(tool, 13) + " | " + e2e)
+            let n = max(subset.count, 1)
+            print(Self.json([("suite", "router"), ("split", label), ("n", subset.count),
+                             ("tool", Double(subset.filter(\.toolCorrect).count) / Double(n)),
+                             ("e2e", Double(subset.filter(\.endToEnd).count) / Double(n))]))
         }
-        let v1 = outcomes.filter { $0.testCase.origin == .v1 }
-        let v2 = outcomes.filter { $0.testCase.origin == .v2 }
 
         print("EVAL Deterministic intent router, synthetic corpus (\(outcomes.count) utterances)")
-        print("EVAL " + pad("split", 20) + " | n   | tool accuracy | end-to-end")
-        print(row("v1 canonical", v1.filter { $0.testCase.category == .canonical }))
-        print(row("v1 paraphrase", v1.filter { $0.testCase.category == .paraphrase }))
-        print(row("v1 all (original 40)", v1))
-        print(row("v2 canonical", v2.filter { $0.testCase.category == .canonical }))
-        print(row("v2 compound", v2.filter { $0.testCase.category == .compound }))
-        print(row("v2 paraphrase (dev)", v2.filter { $0.testCase.category == .paraphrase }))
-        print(row("v2 held-out", v2.filter { $0.testCase.category == .heldout }))
-        print(row("overall", outcomes))
+        print("EVAL " + pad("split", 26) + " | n   | tool accuracy | end-to-end")
+        for split in Self.splits {
+            row(split.label, outcomes.filter { split.contains($0.testCase) })
+        }
+        row("original 40 (v1)", outcomes.filter { $0.testCase.origin == .v1 })
+        row("overall", outcomes)
 
         let micros: [Double] = outcomes.map { outcome in
             let parts = outcome.latency.components
@@ -238,6 +266,7 @@ struct IntentRouterEval {
         let p95 = micros[min(micros.count - 1, Int(Double(micros.count) * 0.95))]
         print(String(format: "EVAL routing + tool execution latency (in-memory store, CI simulator): p50 %.2f ms, p95 %.2f ms",
                      p50 / 1000, p95 / 1000))
+        print(Self.json([("suite", "latency"), ("p50_ms", p50 / 1000), ("p95_ms", p95 / 1000)]))
 
         // Regression gate: canonical phrasing (and the documented compound
         // forms) is the router's contract.
@@ -247,11 +276,56 @@ struct IntentRouterEval {
             Issue.record("Canonical eval regression: \"\(miss.testCase.utterance)\" -> \(miss.note)")
         }
 
+        // Held-out misses (both held-out splits) are counted, never itemized,
+        // so they cannot leak into rule-writing.
         for miss in outcomes where !miss.endToEnd && miss.testCase.category != .heldout {
             let label = "\(miss.testCase.origin.rawValue) \(miss.testCase.category.rawValue)"
             print("EVAL miss [\(label)] expected \(miss.testCase.steps?.joined(separator: "+") ?? miss.testCase.tool): \"\(miss.testCase.utterance)\" -> \(miss.note)")
         }
-        let heldoutMisses = outcomes.filter { $0.testCase.category == .heldout && !$0.endToEnd }.count
-        print("EVAL held-out misses: \(heldoutMisses) (not itemized, by design)")
+        for origin in [IntentEvalCase.Origin.v2, .v3] {
+            let misses = outcomes.filter { $0.testCase.origin == origin && $0.testCase.category == .heldout && !$0.endToEnd }.count
+            print("EVAL \(origin == .v2 ? "v0.2" : "v0.3") held-out misses: \(misses) (not itemized, by design)")
+        }
+    }
+    /// Recall@k of `ToolSelector`: the share of cases whose expected tool
+    /// (every step, for compound requests) is inside the trimmed set the
+    /// Foundation Models brain would be offered. All 24 tools available
+    /// (integrations on, as in the eval fixture). This measures the trim,
+    /// not the model: it says nothing about which tool the model then picks.
+    /// The selector reuses the deterministic grammar, so canonical splits
+    /// are not independent; the held-out splits are the meaningful rows.
+    @Test func toolTrimmingRecall() {
+        let container = Store.makeContainer(inMemory: true)
+        defer { withExtendedLifetime(container) {} }
+        let box = ToolBox(services: DataServices(context: container.mainContext),
+                          semanticIndex: SemanticIndex(context: container.mainContext))
+        let available = AgentToolRegistry.all(toolbox: box).map(\.name)
+
+        func covered(_ testCase: IntentEvalCase, k: Int) -> Bool {
+            let selected = Set(ToolSelector.select(testCase.utterance, available: available, limit: k).tools)
+            return Set(testCase.steps ?? [testCase.tool]).isSubset(of: selected)
+        }
+        print("EVAL Tool trimming recall@k (expected tool inside the trimmed set; \(available.count) tools available)")
+        let groups: [(label: String, contains: (IntentEvalCase) -> Bool)] =
+            Self.splits + [(label: "overall", contains: { _ in true })]
+        for k in [6, 8] {
+            for (label, contains) in groups {
+                let subset = IntentEvalCorpus.cases.filter(contains)
+                let hits = subset.filter { covered($0, k: k) }.count
+                print("EVAL trim recall@\(k) " + label + ": " + Self.percent(hits, subset.count) + " (n=\(subset.count))")
+                print(Self.json([("suite", "trim"), ("k", k), ("split", label), ("n", subset.count),
+                                 ("recall", Double(hits) / Double(max(subset.count, 1)))]))
+            }
+        }
+        // Dev misses at the default k may be itemized; held-out ones are not.
+        for testCase in IntentEvalCorpus.cases
+        where testCase.category != .heldout && !covered(testCase, k: ToolSelector.defaultLimit) {
+            print("EVAL trim miss [\(testCase.origin.rawValue) \(testCase.category.rawValue)] \(testCase.steps?.joined(separator: "+") ?? testCase.tool): \"\(testCase.utterance)\"")
+        }
+        let average = Double(IntentEvalCorpus.cases.map {
+            ToolSelector.select($0.utterance, available: available).tools.count
+        }.reduce(0, +)) / Double(IntentEvalCorpus.cases.count)
+        print(String(format: "EVAL trim average tools offered at k=%ld: %.1f of %ld", ToolSelector.defaultLimit, average, available.count))
     }
 }
+

@@ -1,0 +1,46 @@
+name: Agent misread a request
+description: The agent picked the wrong tool, filled the wrong arguments, or did nothing useful.
+labels: [bug, eval]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste private notes or task titles. Reword the request with made-up names if needed;
+        misses reported here may become synthetic eval cases.
+  - type: input
+    id: request
+    attributes:
+      label: What you said
+      placeholder: "push the dentist to next Thursday"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: The action you wanted (for example, move the task's due date to Thursday).
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: The tool card that appeared, or the reply.
+    validations:
+      required: true
+  - type: dropdown
+    id: brain
+    attributes:
+      label: Brain in use (Settings, Intelligence)
+      options:
+        - Apple Intelligence
+        - Apple Intelligence with Focused tool list
+        - Quick intents (deterministic)
+        - MLX build
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.3.0 or a commit SHA"

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block main %}
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-head">
+      <img src="img/icon-256.png" alt="PocketBrains app icon">
+      <p class="eyebrow">On-device AI agent for iOS 26</p>
+    </div>
+    <h1>A private chief of staff for your tasks, projects and notes. Nothing leaves the phone.</h1>
+    <p class="lede">One thread, a 24-tool agent that plans multi-step requests, answers from your
+    notes with citations, and can undo anything it did. Apple's on-device model when available,
+    an optional open model, and a deterministic router that always works.</p>
+    <p class="cta">
+      <a class="button primary" href="#evaluation">Evaluation</a>
+      <a class="button" href="architecture.html">Architecture</a>
+      <a class="button" href="{{ repo_url }}">View on GitHub</a>
+    </p>
+    {% if stats %}
+    <div class="stats">
+      {% for s in stats %}
+      <div class="stat">
+        <div class="stat-label">{{ s.label }}</div>
+        <div class="stat-value">{{ s.value }}</div>
+        <div class="stat-detail">{{ s.detail }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section id="evaluation" class="wrap prose">
+  <h2>Evaluation</h2>
+  {% if not tables %}
+  <p class="callout">No CI log was given to the site generator, so there are no numbers here.
+  The Pages workflow builds this page from the newest successful CI run on <code>main</code>.</p>
+  {% else %}
+  <p class="note">Parsed from the <code>EVALJSON</code> lines of the iOS test job in
+  <a href="{{ repo_url }}/actions/runs/{{ run_id }}">CI run {{ run_id }}</a>{% if baseline_run_id %}, with
+  the "before" column from <a href="{{ repo_url }}/actions/runs/{{ baseline_run_id }}">run {{ baseline_run_id }}</a>
+  (the v0.3 branch before any router change){% endif %}. All corpora are synthetic and written for
+  the eval. Nothing below is typed by hand. These numbers describe the deterministic brain and the
+  tool trimmer only; no Foundation Models or MLX accuracy is claimed.</p>
+  <p><span class="tag honest">held-out</span> never used to tune rules, misses never itemized &middot;
+  <span class="tag tuned">dev</span> rules may be tuned on it &middot;
+  <span class="tag gated">gated</span> must stay at 100% or CI fails.</p>
+  {% for t in tables %}
+  <h3 id="{{ t.anchor }}">{{ t.title }}</h3>
+  {% if t.intro %}<p>{{ t.intro | safe }}</p>{% endif %}
+  <div class="table-scroll"><table>
+    <thead><tr>{% for h in t.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for row in t.rows %}<tr>{% for c in row %}<td>{{ c | safe }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></div>
+  {% endfor %}
+  {% for line in notes %}<p class="note">{{ line }}</p>{% endfor %}
+  {% endif %}
+</section>
+
+{% for title, anchor, body in sections %}
+<section id="{{ anchor }}" class="wrap prose"><h2>{{ title }}</h2>{{ body | safe }}</section>
+{% endfor %}
+
+<section class="wrap prose">
+  <h2>More</h2>
+  <ul>
+    <li><a href="architecture.html">Architecture</a>: the agent loop, planner, journal and undo, cited retrieval, router tiers, tool trimming.</li>
+    <li><a href="product.html">Product brief</a>: problem, users, scope, metrics, trade-offs, roadmap.</li>
+    <li><a href="verification.html">Verification checklist</a>: what CI covers, what needs a device.</li>
+  </ul>
+</section>
+{% endblock %}

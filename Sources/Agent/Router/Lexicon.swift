@@ -18,18 +18,21 @@ enum Lexicon {
     /// action rather than phrasings lifted from the eval corpus.
     static let verbs: [String: Action] = [
         // complete
-        "finish": .complete, "complete": .complete, "do": .complete, "close": .complete,
-        "cross": .complete, "knock": .complete,
+        // ("do" is not here: as an auxiliary it read questions such as
+        // "did we decide…" and "where do things stand" as completions.)
+        "finish": .complete, "complete": .complete, "close": .complete,
+        "cross": .complete, "knock": .complete, "tick": .complete,
         // reschedule
         "reschedule": .reschedule, "move": .reschedule, "push": .reschedule, "postpone": .reschedule,
         "delay": .reschedule, "bump": .reschedule, "shift": .reschedule, "slide": .reschedule,
+        "slip": .reschedule, "kick": .reschedule,
         // snooze
-        "snooze": .snooze, "defer": .snooze, "hold": .snooze,
+        "snooze": .snooze, "defer": .snooze, "hold": .snooze, "park": .snooze, "hide": .snooze,
         // priority
         "prioritize": .prioritize, "prioritise": .prioritize, "escalate": .prioritize,
         "deprioritize": .deprioritize, "deprioritise": .deprioritize,
         // capture
-        "add": .create, "remind": .create, "schedule": .create, "put": .create,
+        "add": .create, "remind": .create, "schedule": .create, "put": .create, "pencil": .create,
         "note": .note, "jot": .note, "write": .note, "record": .note, "log": .note,
         // retrieval & knowledge
         "search": .search, "find": .search, "look": .search,

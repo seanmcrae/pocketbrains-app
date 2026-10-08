@@ -1,9 +1,64 @@
 # PocketBrains: Product brief
 
-Status: pre-release. Built and tested in CI on the iOS 26 simulator; not
-yet on the App Store and without users. Numbers in this document come from
+Status: pre-release (v0.3 in review; v0.2.0 is the latest source
+release). Built and tested in CI on the iOS 26 simulator; not yet on the
+App Store and without users. Numbers in this document come from
 the repository's own eval and CI, and say so; targets are marked as
 targets.
+
+## v0.3 at a glance
+
+v0.3 (pull request "PocketBrains v0.3: honest generalization, tool
+trimming, RAG eval, docs site") is a measurement release. It makes the
+generalization number trustworthy before improving it, prepares the
+Foundation Models brain for a smaller tool budget, and gives "ask your
+notes" an eval large enough to mean something.
+
+| Area | What shipped | Why it matters |
+|---|---|---|
+| Honest generalization | New 53-utterance held-out split frozen before any router change; 51-utterance dev split; v0.2 held-out frozen as "reported"; router constructions tuned on dev only | The v0.2 held-out number had been published, so it could no longer be a clean test |
+| Tool trimming | Deterministic `ToolSelector` (about 8 of 24 tools per request, core tools always in), behind a Settings switch, with recall@k in CI | A ~3B model with 22 to 24 tool schemas is the largest known risk to on-device accuracy |
+| RAG eval | 61 synthetic questions over 22 notes: recall@1/@3, answer-span hit, citation faithfulness, span attribution | 12 questions could not separate a real change from noise |
+| Docs site | GitHub Pages site generated from CI logs | One place to read the evidence, with no hand-typed numbers |
+
+### v0.3 metrics (from CI, deterministic brain and trimmer only)
+
+| Metric | Before | v0.3 | Source (GitHub Actions run) |
+|---|---|---|---|
+| Tests | 112 in 15 suites | 129 in 18 suites | 37721075662, 37723402205 |
+| v0.3 held-out paraphrases (53), end-to-end, never tuned on | 30.2% | 39.6% | 37721075662, 37723402205 |
+| v0.2 held-out paraphrases (34), end-to-end, frozen | 35.3% | 47.1% | same |
+| v0.3 dev paraphrases (51), end-to-end, tuned on | 5.9% | 100% | same |
+| Canonical + compound (71), end-to-end | 100% (gated) | 100% (gated) | same |
+| Tool-trimming recall@8, all 243 cases / v0.3 held-out | n/a | 96.3% / 90.6% | 37723402205 |
+| Tool-trimming recall@6, all 243 cases / v0.3 held-out | n/a | 94.7% / 86.8% | 37723402205 |
+| Ask-your-notes BM25 recall@1 / recall@3, 61 questions | n/a | 93.4% / 96.7% | 37723402205 |
+| Citation faithfulness (extractive answers, 130 markers) | n/a | 100% | 37723402205 |
+| Semantic / hybrid retrieval | n/a | skipped: no embedding asset on the CI runner | 37723402205 |
+
+"Before" is the v0.3 branch with the new splits committed and the router
+unchanged. Not measured: anything about Foundation Models or MLX, and
+whether trimming helps the model; those need a device (roadmap).
+
+### v0.3 trade-offs
+
+- **A lower headline number on purpose.** The new held-out split scored
+  30.2% before any work, below v0.2's 35.3% on its own held-out split.
+  Reporting the new split as the headline makes the product look weaker
+  this release and is the only way the next number means anything.
+- **Constructions, not sentences.** The router gained frames for general
+  constructions ("X is done", "can X slip to Y", "Idea: …") rather than
+  rules for each dev miss. Dev reached 100%; the held-out split moved 9.4
+  points. The remaining 32 held-out misses are left to the model tiers
+  rather than chased with rules that would only fit this corpus.
+- **Trimming ships off.** Recall@8 is 96.3%, so roughly 1 corpus case in 27
+  would be offered a set without the right tool, and the trimmed session
+  drops multi-turn context. Without on-device evidence that the smaller
+  schema helps the model, the safer default is the full catalog.
+- **"Push the invoice to Monday" is a reschedule.** The v0.1 expectation
+  (`updateTask`) predates `rescheduleTask`; the expectation was corrected
+  and the reason recorded, rather than keeping a known-wrong test or
+  bending the router to it.
 
 ## v0.2 at a glance
 
@@ -63,7 +118,7 @@ first roadmap item.
   user may want.
 - **Tool count versus a ~3B model.** 22 to 24 tools is a lot of schema for
   a small context window; integration tools are offered only after
-  opt-in, and per-request tool trimming is next.
+  opt-in. (v0.3 added per-request trimming behind a switch.)
 - **Widget reads a snapshot, not the database.** Moving the SwiftData
   store into the App Group would be a data migration with real risk; a
   small JSON snapshot written after each task change is enough for a
@@ -158,7 +213,9 @@ material to a chatbot.
 |---|---|---|---|
 | Tool-selection accuracy, deterministic router, canonical phrasing | `Tests/Eval` on the bundled synthetic corpus, every CI run | See README "Evaluation" | 100% on canonical phrasing |
 | End-to-end accuracy (right tool, succeeded, right arguments) | Same eval | See README | 100% canonical |
-| Paraphrase accuracy of the deterministic router | Same eval, paraphrase split | See README | Tracked, not gated: paraphrase is the language model's job |
+| Paraphrase accuracy of the deterministic router | Same eval: dev splits (tuned on) and two frozen held-out splits (never tuned on) | See README | Tracked, not gated: paraphrase is the language model's job; the v0.3 held-out split is the headline |
+| Tool-trimming recall@k | Share of corpus cases whose expected tool is in the `ToolSelector` set, every CI run | See README | 95% or more at k = 8 on held-out before the switch defaults on |
+| "Ask your notes" retrieval and citations | `RAGEval`: 61 synthetic questions; recall@1/@3, answer-span hit, citation faithfulness | See README | Faithfulness 100% (gated by test); recall@3 at or above 90% (gated) |
 | Tool-call accuracy, Foundation Models brain | Same corpus run on an Apple Intelligence device | Not measured yet (needs hardware) | Target 90% end-to-end on the combined corpus |
 | Routing plus tool execution latency, deterministic | Eval timing on the CI simulator, in-memory store | See README | Under 50 ms p95 |
 | Time to first token, Foundation Models | Instrumented on device | Not measured yet | Target under 1 s on an iPhone 16 Pro class device |
@@ -203,6 +260,7 @@ phrase a short reply) while deterministic code does the data work.
 | Risk | Mitigation |
 |---|---|
 | Foundation Models API changes between iOS 26 point releases | API hedges listed in `docs/VERIFICATION.md`; adapter is one file |
+| Trimming hides the tool a request needs | Core tools always offered; recall@k tracked in CI; the switch is off by default until measured on device |
 | Small model picks the wrong tool or misparses a date | Dates are re-parsed by `NaturalDateParser`; tool cards make actions visible and undoable from the spaces |
 | Prompt injection through note content triggers a destructive tool | No delete tools are exposed to the agent; every agent mutation is journaled and undoable |
 | A planned request does the wrong thing in several places at once | The plan card shows every step; postconditions stop the plan; one Undo reverts the whole plan atomically |
@@ -214,18 +272,20 @@ phrase a short reply) while deterministic code does the data work.
 
 **Now**
 
-- Run the 139-utterance corpus (including compound requests) against the
-  Foundation Models brain on device; publish tool and plan accuracy, and
-  time to first token. Measure cited-answer faithfulness on a small
-  hand-labelled set.
-- Trim the tool list per request for the ~3B model.
-- Fix the O(n²) blocker lookup flagged in `docs/QA_REPORT.md`.
+- Run the 243-utterance corpus (including both held-out splits and the
+  compound requests) against the Foundation Models brain on device;
+  publish tool and plan accuracy, and time to first token (issue #5).
+- Validate tool trimming on device, trimming on versus off, then choose
+  its default (issue #6).
+- Measure cited-answer faithfulness of model-written answers on a small
+  hand-labelled set (issue #7).
+- Fix the O(n²) blocker lookup flagged in `docs/QA_REPORT.md` (issue #10).
 
 **Next**
 
-- Dynamic Type mapping and a full VoiceOver pass.
+- Dynamic Type mapping and a full VoiceOver pass (issue #8).
 - Localization of UI strings; multilingual routing via the model tiers.
-- Interactive widget (complete a task from the widget through App Intents).
+- Interactive widget (complete a task from the widget through App Intents, issue #9).
 
 **Later**
 

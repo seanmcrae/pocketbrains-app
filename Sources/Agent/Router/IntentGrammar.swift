@@ -17,11 +17,14 @@ struct ParsedIntent: Equatable {
 /// commands come first because in "remind me to finish the deck" the verbs
 /// belong to the task title, not the intent.
 enum IntentGrammar {
-    static func parse(_ prompt: String) -> ParsedIntent {
+    static func parse(_ rawPrompt: String) -> ParsedIntent {
+        // "Wait, …", "Not now, …": interjections carry no intent.
+        let prompt = CommandFrames.stripDiscourse(rawPrompt)
         let lower = prompt.lowercased()
 
-        // v0.2 frames the capture rules below would mis-read.
+        // Frames the capture rules below would mis-read (v0.2, then v0.3).
         if let early = CommandFrames.beforeCapture(prompt) { return early }
+        if let early = CommandFrames.earlyV3(prompt) { return early }
 
         // Reminders / tasks
         if lower.hasPrefix("remind me") || lower.contains("add a task") || lower.contains("add task")
@@ -53,7 +56,19 @@ enum IntentGrammar {
         // Undo
         if let undo = parseUndo(lower) { return undo }
 
-        // v0.2 command frames: new tools and common rewordings.
+        // Reminders export (opt-in integration). Before the command frames,
+        // so "push today's list to Apple Reminders" is not a reschedule.
+        if lower.contains("reminders app") || lower.contains("to reminders") || lower.contains("into reminders")
+            || lower.contains("to apple reminders") {
+            let scope: String
+            if lower.contains("overdue") { scope = "overdue" }
+            else if lower.contains("week") || lower.contains("upcoming") { scope = "upcoming" }
+            else if lower.contains("all ") || lower.contains("everything") || lower.contains("every task") { scope = "all" }
+            else { scope = "today" }
+            return ParsedIntent(tool: "exportToReminders", arguments: ["scope": scope])
+        }
+
+        // Command frames (v0.3 constructions first): new tools and rewordings.
         if let frame = CommandFrames.commands(prompt) { return frame }
 
         // Ask your notes (cited Q&A) — before the agenda's "what do i…".
@@ -64,17 +79,6 @@ enum IntentGrammar {
         // Calendar context (opt-in integration)
         if let window = calendarWindow(lower) {
             return ParsedIntent(tool: "calendarAgenda", arguments: ["window": window])
-        }
-
-        // Reminders export (opt-in integration)
-        if lower.contains("reminders app") || lower.contains("to reminders") || lower.contains("into reminders")
-            || lower.contains("to apple reminders") {
-            let scope: String
-            if lower.contains("overdue") { scope = "overdue" }
-            else if lower.contains("week") || lower.contains("upcoming") { scope = "upcoming" }
-            else if lower.contains("all ") || lower.contains("everything") || lower.contains("every task") { scope = "all" }
-            else { scope = "today" }
-            return ParsedIntent(tool: "exportToReminders", arguments: ["scope": scope])
         }
 
         // Agenda
@@ -147,6 +151,9 @@ enum IntentGrammar {
         // Lemma-driven fallback before giving up.
         if let paraphrase = CommandFrames.paraphrase(prompt) { return paraphrase }
 
+        // A factual question nothing claimed is a question for the notes.
+        if let question = CommandFrames.questionFallback(prompt) { return question }
+
         // Default: the agenda, with an honest note about the floor mode.
         return ParsedIntent(tool: "agenda", isDefault: true)
     }
@@ -156,7 +163,8 @@ enum IntentGrammar {
         let trimmed = lower.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
         let starts = ["undo", "revert", "take that back", "take it back", "roll that back",
                       "roll it back", "roll back", "nevermind, undo", "never mind, undo",
-                      "never mind undo", "scratch that"]
+                      "never mind undo", "scratch that", "put that back", "put it back",
+                      "change that back", "change it back", "set that back", "set it back"]
         guard starts.contains(where: { trimmed == $0 || trimmed.hasPrefix($0 + " ") }) else { return nil }
         let scope = UndoEngine.Scope.from(trimmed)
         return ParsedIntent(tool: "undo", arguments: ["scope": scope.rawValue])
@@ -181,7 +189,7 @@ enum IntentGrammar {
     /// "what's my afternoon look like", "what's on my calendar tomorrow",
     /// "any meetings this morning", "my schedule today" → the window phrase.
     static func calendarWindow(_ lower: String) -> String? {
-        let cues = ["calendar", "meeting", "my schedule", "look like", "looking like",
+        let cues = ["calendar", "meeting", "my schedule", "look like", "looking like", "busy",
                     "am i free", "free time", "events today", "events tomorrow"]
         guard cues.contains(where: { lower.contains($0) }), !lower.contains("reschedule") else { return nil }
         var window = lower.contains("tomorrow") ? "tomorrow" : "today"

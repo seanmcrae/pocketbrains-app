@@ -1,7 +1,8 @@
 # Only GitHub Actions is tracked. The app has no Package.swift and no
 # resolved Swift packages (the optional MLX dependency is commented out in
-# project.yml), so there is nothing for the Swift ecosystem to update yet.
-# Add a `swift` entry when a Package.swift or Package.resolved is committed.
+# project.yml), and the docs site's two Python dependencies are pinned in
+# docs/site/requirements.txt and only run in the Pages workflow. Add a
+# `swift` entry when a Package.swift or Package.resolved is committed.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -10,3 +11,7 @@ updates:
       interval: weekly
     commit-message:
       prefix: ci
+    labels: [dependencies, github_actions]
+    groups:
+      actions:
+        patterns: ["*"]

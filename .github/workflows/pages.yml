@@ -1,0 +1,72 @@
+name: Pages
+
+# Publishes the docs site to the gh-pages branch after CI succeeds on main.
+# The eval tables are parsed from that CI run's build log (the ios-build-log
+# artifact), so the site only ever shows numbers a CI run printed.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # The v0.3 branch before any router change: the site's "before" column.
+  BASELINE_RUN_ID: "37721075662"
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install site dependencies
+        run: pip install -r docs/site/requirements.txt
+
+      - name: Download CI logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          if [ -z "$RUN_ID" ]; then
+            RUN_ID="$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch main \
+              --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          fi
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n ios-build-log -D ci-logs
+          # Artifacts expire after 90 days; the site builds without a baseline.
+          gh run download "$BASELINE_RUN_ID" -R "$GITHUB_REPOSITORY" -n ios-build-log -D baseline-logs || true
+
+      - name: Build site
+        run: |
+          ARGS=(--log ci-logs/build.log --run-id "$RUN_ID" --out site)
+          [ -f ci-logs/build-embedding.log ] && ARGS+=(--embedding-log ci-logs/build-embedding.log)
+          [ -f baseline-logs/build.log ] && ARGS+=(--baseline-log baseline-logs/build.log --baseline-run-id "$BASELINE_RUN_ID")
+          python scripts/build_site.py "${ARGS[@]}"
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          force_orphan: true
+          enable_jekyll: false
+          commit_message: "Deploy docs site from ${{ github.event.workflow_run.head_sha || github.sha }}"

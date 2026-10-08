@@ -7,6 +7,13 @@ DerivedData/
 /Support/*.plist
 /Support/*.entitlements
 build.log
+build-embedding.log
+
+# Docs site output and downloaded CI logs (scripts/build_site.py)
+/site/
+/ci-logs/
+/baseline-logs/
+__pycache__/
 
 # Swift Package Manager
 *.swiftpm

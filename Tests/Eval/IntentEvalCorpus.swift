@@ -14,16 +14,19 @@ import Foundation
 ///   link it…"), scored on the exact tool sequence plus state checks.
 /// - `paraphrase`: natural rewordings outside that grammar. The router's
 ///   rules MAY be tuned against these ("dev" paraphrases).
-/// - `heldout`: paraphrases written in one sitting, committed before the
-///   v0.2 router work began, and never used to tune rules. Their misses are
-///   not printed individually, so they can't leak into rule-writing. This
-///   is the honest number for "how well does the floor generalize".
+/// - `heldout`: paraphrases written in one sitting and committed before the
+///   router work of their release, never used to tune rules. Their misses
+///   are not printed individually, so they can't leak into rule-writing.
+///   Two held-out splits exist: "v0.2 held-out (reported)" (origin v2; its
+///   score was published with v0.2, so it is frozen but no longer a clean
+///   test) and "v0.3 held-out (frozen)" (origin v3, `HeldOutV3.swift`),
+///   the honest generalization number from v0.3 on.
 ///
-/// `origin` separates the original 40 utterances (v0.1) from the v0.2 ones,
-/// so before/after can be reported on the original set unchanged.
+/// `origin` separates the original 40 utterances (v0.1), the v0.2 additions
+/// and the v0.3 additions, so before/after can be reported per set.
 struct IntentEvalCase {
     enum Category: String, CaseIterable { case canonical, compound, paraphrase, heldout }
-    enum Origin: String { case v1, v2 }
+    enum Origin: String { case v1, v2, v3 }
     enum Due: Equatable {
         case undated, daysFromToday(Int), nextWeekday(Int) // weekday: 1 = Sunday
         case endOfMonth
@@ -57,7 +60,7 @@ struct IntentEvalCase {
 }
 
 enum IntentEvalCorpus {
-    static let cases: [IntentEvalCase] = v1 + canonicalV2 + compound + paraphraseV2 + heldout
+    static let cases: [IntentEvalCase] = v1 + canonicalV2 + compound + paraphraseV2 + heldout + devV3 + heldoutV3
 
     // MARK: - v0.1 corpus (unchanged utterances and expectations)
 
@@ -129,7 +132,15 @@ enum IntentEvalCorpus {
         .init(utterance: "Notes about pricing", category: .paraphrase, tool: "searchNotes", origin: .v1),
         .init(utterance: "Write down that the client wants a demo next week", category: .paraphrase, tool: "createNote", origin: .v1),
         .init(utterance: "Connect pricing research to Q3 planning", category: .paraphrase, tool: "linkItems", origin: .v1),
-        .init(utterance: "Push send the invoice to Monday", category: .paraphrase, tool: "updateTask", origin: .v1),
+        // Expectation corrected in v0.3 (was updateTask). v0.1 had no
+        // rescheduleTask, so a date move could only be an update. v0.2 added
+        // rescheduleTask for exactly this job ("push X to <date>" is the
+        // reschedule verb plus a date), and updateTask stays the tool for
+        // changing several fields or the project at once. The router did not
+        // change; the expectation was wrong for a 24-tool agent. The target
+        // check now also verifies the task actually lands on Monday.
+        .init(utterance: "Push send the invoice to Monday", category: .paraphrase, tool: "rescheduleTask", origin: .v1,
+              target: "Send the invoice", targetDue: .nextWeekday(2)),
         .init(utterance: "Add a milestone Beta launch to website redesign", category: .paraphrase, tool: "addMilestone", origin: .v1),
     ]
 
@@ -276,7 +287,8 @@ enum IntentEvalCorpus {
               tool: "createTask", title: "Renew the lease", due: .endOfMonth),
     ]
 
-    // MARK: - v0.2 HELD-OUT paraphrases (frozen; never used to tune rules)
+    // MARK: - v0.2 held-out (reported): frozen, never used to tune rules.
+    // Published with v0.2, so kept as a secondary signal, not the headline.
 
     static let heldout: [IntentEvalCase] = [
         .init(utterance: "Could you remind me to book a dentist appointment next Tues afternoon?", category: .heldout,

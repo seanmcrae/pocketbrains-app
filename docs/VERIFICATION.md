@@ -3,9 +3,9 @@
 Honest accounting of what has and hasn't been verified, and the exact
 checklist for the first build on a Mac.
 
-## Status: CI green ✅
+## Status: CI green
 
-Every push now **builds and passes the full test suite** on a macOS CI
+Every pull request and push to `main` **builds and passes the full test suite** on a macOS CI
 runner (XcodeGen → xcodebuild test on an iOS simulator), and the app has
 been run by hand on an iOS 26 simulator (thread, spaces, agent fallback,
 seeding all verified working).
@@ -69,7 +69,12 @@ seeding all verified working).
    24 with integrations on. If the session's context or tool budget is
    exceeded on device, the first remedy is trimming the tool list per
    request.
-9. **MLX backend** is opt-in and untested by definition (needs the package
+9. **Per-request tool trimming (v0.3)** builds a new
+   `LanguageModelSession(tools:instructions:)` per request with the
+   `ToolSelector` subset, filtering `[any Tool]` by `name`. It compiles in
+   CI; whether the smaller schema improves tool choice or latency on device
+   is unmeasured (issue #6). It is off by default.
+10. **MLX backend** is opt-in and untested by definition (needs the package
    + `-D POCKETBRAINS_MLX`); the `mlx-swift-examples` generate API moves —
    treat `MLXBackend.generate` as the adaptation point.
 
@@ -107,6 +112,31 @@ v0.2 (simulator or device):
       the app and the widget updates. Needs the App Group capability on
       both targets when signed.
 - [ ] Complete a recurring task in Today: the next occurrence appears.
+
+v0.3 (simulator or device):
+- [ ] Quick intents: "Can the invoice slip to Thursday?", "Paid the water
+      bill", "The gutters are clean", "Q3 planning progress?", "What's the
+      venue capacity?" each produce the expected card.
+- [ ] Settings, Intelligence shows "Focused tool list" (off by default).
+      On an Apple Intelligence device, turn it on and repeat the v0.2
+      checks above; note any request where the needed tool was not offered.
+- [ ] After the v0.3 merge: CI runs on the push to `main`, then the Pages
+      workflow publishes `gh-pages`, and https://seanmcrae.github.io/pocketbrains-app/
+      shows eval tables citing that CI run. If Pages does not serve the
+      branch the first time, enable Settings, Pages, "Deploy from a branch",
+      `gh-pages` / root, and push an empty commit to `gh-pages` titled
+      "Publish GitHub Pages".
+
+What CI measures and what it skips (v0.3):
+- Measured on every run: router accuracy on all eight splits, tool-trimming
+  recall@6 and @8, BM25 retrieval recall@1 and @3, answer-span hit rate,
+  citation faithfulness and span attribution on the 61-question fixture.
+- Attempted on every run, skipped so far: semantic and hybrid retrieval.
+  The CI step allows the NLEmbedding sentence asset, but the macOS runner's
+  simulator reports it unavailable, so the eval prints "skipped" rather
+  than a number. Run the RAG eval on a device or a simulator with the asset
+  to measure the hybrid path.
+- Never measured in CI: Foundation Models and MLX accuracy and latency.
 
 Design (record simulator captures, step frame-by-frame):
 - [ ] Horizon pull: thread recedes smoothly, no corner-radius pop at

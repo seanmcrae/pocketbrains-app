@@ -27,7 +27,8 @@ flowchart TB
     subgraph Brains["ModelBackend implementations"]
         FM["FoundationModelBackend<br/>native Tool + @Generable plans"]
         MLX["MLXBackend (opt-in build flag)<br/>one or many tool_call envelopes"]
-        Fallback["IntentFallbackBackend<br/>IntentGrammar: CommandFrames + Lexicon (NLTagger)"]
+        Fallback["IntentFallbackBackend<br/>IntentGrammar: CommandFrames + ParaphraseFrames + Lexicon (NLTagger)"]
+        Selector["ToolSelector (optional)<br/>about 8 of 24 tools per request"]
     end
 
     subgraph Tools["Tools"]
@@ -47,6 +48,7 @@ flowchart TB
 
     Thread --> Orch --> Select
     Select --> FM & MLX & Fallback
+    Selector -.->|"Focused tool list"| FM
     FM --> Planner
     Fallback --> Planner
     Planner --> Exec
@@ -75,7 +77,7 @@ flowchart TB
 | Layer | Path | Responsibility |
 |---|---|---|
 | App | `Sources/App` | Entry point, `AppModel` (one `zoom` scalar drives the thread/spaces transition), `RootShell`, App Intents |
-| Agent | `Sources/Agent` | `AgentOrchestrator`, `ToolBox`, `AgentToolRegistry`, `ToolCallParser`, `UndoEngine`, `NaturalDateParser`, `BriefEngine`; `Planner/` (`CompoundPlanner`, `PlanExecutor`, `AgentPlan`); `Router/` (`IntentGrammar`, `CommandFrames`, `Lexicon`) |
+| Agent | `Sources/Agent` | `AgentOrchestrator`, `ToolBox`, `AgentToolRegistry`, `ToolCallParser`, `UndoEngine`, `NaturalDateParser`, `BriefEngine`; `Planner/` (`CompoundPlanner`, `PlanExecutor`, `AgentPlan`); `Router/` (`IntentGrammar`, `CommandFrames`, `ParaphraseFrames`, `Lexicon`, `ToolSelector`) |
 | Intelligence | `Sources/Intelligence` | `ModelBackend` protocol, the three backends, `SemanticIndex`; `Retrieval/` (`NoteChunker`, `BM25Index`, `NotesRAG`, `CitedAnswerComposer`) |
 | Integrations | `Sources/Integrations` | `CalendarReading` / `RemindersWriting` protocols, `EventKitCalendar` / `EventKitReminders`, `AgendaComposer`, `ReminderMapper`, `WidgetPublisher` |
 | Data | `Sources/Data` | SwiftData models (including `JournalEntry`, `NoteChunk`, `RecurrenceRule`, `ReminderExport`), `DataServices`, `Store`, `SearchEngine`, `NotificationPlanner`, JSON `Exporter`, `SeedData` |
@@ -130,9 +132,38 @@ changes:
 
 | Order | Backend | When | Tool calling |
 |---|---|---|---|
-| 1 | `FoundationModelBackend` | `SystemLanguageModel.default.availability == .available` and preference is Automatic | Native `Tool` conformances with `@Generable` argument structs; streamed snapshots |
+| 1 | `FoundationModelBackend` | `SystemLanguageModel.default.availability == .available` and preference is Automatic | Native `Tool` conformances with `@Generable` argument structs; streamed snapshots; optionally only the tools `ToolSelector` picks for the request |
 | 2 | `MLXBackend` | Compiled only with `-D POCKETBRAINS_MLX` plus the mlx-swift-examples package | System prompt lists the registry as JSON; the model replies with a `<tool_call>` envelope; `ToolCallParser` extracts it; up to 4 tool hops per turn |
 | 3 | `IntentFallbackBackend` | Always available; forced by Settings, Quick intents | `routeTurn`: compound requests become a plan (`CompoundPlanner` then `PlanExecutor`); single ones go through `IntentGrammar` to one registry call. Replies are templated and streamed word by word so the UI behaves identically |
+
+### Per-request tool trimming (Foundation Models)
+
+The on-device model is offered every tool's schema on every request: 22
+tools, or 24 with both integrations on. With Settings, Intelligence,
+"Focused tool list" switched on (`ToolTrimming`, off by default),
+`FoundationModelBackend` builds a one-request session that offers only
+the tools `ToolSelector` picks:
+
+1. The deterministic grammar's own reading of the request scores
+   highest: the tool `IntentGrammar.parse` returns, each step of a
+   `CompoundPlanner` plan, then the parse's fallbacks.
+2. Lexicon verbs (by lemma) vote for their action's tools; for example a
+   reschedule verb votes for `rescheduleTask` and `updateTask`.
+3. Cue words vote for the tools they usually mean ("milestone",
+   "overdue", "according to", "calendar", "reminders").
+4. A date phrase votes for the date-taking tools.
+
+`createTask`, `searchEverything`, `agenda` and `undo` are always offered,
+so a poor trim can still capture, search, answer with the agenda or undo.
+At most 8 tools are offered (the default limit); only tools with a
+positive score fill the room after the core, so simple requests often get
+fewer. Ties break by registry order, so a request always gets the same
+set, and tools the user has not opted into are never offered. Trade-off:
+the trimmed session is fresh per request, so it does not carry
+multi-turn context; compound requests still plan with the full catalog.
+The eval measures recall@k of the trim (is the expected tool, or every
+step of a compound request, inside the set); it does not measure what the
+model then does with it.
 
 ### Multi-step planning
 
@@ -300,15 +331,39 @@ build and show a plan first. Order:
    `.lexicalClass`; a rule-based lemmatizer covers missing assets); the
    first verb whose lemma is in the `Lexicon` synonym sets decides the
    intent and the slots around it are filled the same way.
-7. Otherwise the agenda, with an honest note about quick-intent mode.
+7. `CommandFrames.questionFallback` (v0.3): a factual wh-question nothing
+   else claimed goes to `askNotes`; one scoped to today or this week goes
+   to the agenda.
+8. Otherwise the agenda, with an honest note about quick-intent mode.
+
+v0.3 adds `ParaphraseFrames` (constructions rather than sentences),
+tuned only against the v0.3 dev split. Leading interjections ("Wait,",
+"Not now,") are dropped first. Early frames, before the capture rules:
+"remind me what/who…" is a question, "remind me about X tomorrow" moves an
+existing task (or captures it if there is none), "ping me tomorrow to X",
+a reminder asked for as a noun ("can I get a reminder to…"), and labelled
+captures ("Task: …", "Idea: …", "keep in mind…"). Command frames, before
+the v0.2 ones: statements of state ("the gutters are clean", "that's the
+passport sorted", "X is really important", "X isn't a priority", "X is now
+due Monday", "X comes round every 4 weeks"), subject-first requests ("can
+the invoice slip to Thursday"), a shift without a preposition ("kick the
+report out a couple of days"), past-tense reports ("paid the water bill"
+completes "pay the water bill"), quoted text placed into a named note,
+verbless project status ("Q3 planning progress?"), list states ("still
+open", "stuck"), and searches over everything or over notes. The
+Reminders export check moved ahead of the command frames so "push today's
+list to Apple Reminders" is not read as a reschedule, and "do" left the
+completion lexicon because, as an auxiliary, it turned questions into
+completions.
 
 `NaturalDateParser` covers relative days, weekdays (full, abbreviated,
 "next"/"this"/"every other"), "in N days/weeks/months", "in a fortnight",
 period ends, weekends, explicit dates (NSDataDetector) and a time of day.
 
-The router is measured by the eval in `Tests/Eval` (139 synthetic
-utterances, five splits including a held-out paraphrase split; results in
-the README). Canonical and compound phrasing is gated at 100%.
+The router is measured by the eval in `Tests/Eval` (243 synthetic
+utterances in eight splits, including two frozen held-out paraphrase
+splits whose misses are never itemized; results in the README).
+Canonical and compound phrasing is gated at 100%.
 
 ## Data layer
 
@@ -368,14 +423,17 @@ the test host, so tests exercise keyword search only.
 
 ## Testing and CI
 
-- Swift Testing suites in `Tests/` (112 tests in 15 suites in v0.2): date
+- Swift Testing suites in `Tests/` (129 tests in 18 suites in v0.3): date
   parsing (relative to now and to a fixed reference date), `ToolBox` and
   the new tools, the tool registry and tool-call parser, planning,
   argument passing, failure handling and undo, retrieval (chunking, BM25
   recall@k, citation mapping, incremental index), integrations behind
   mocks and the widget snapshot, the intent router, orbital layout, the
-  streaming chunk clock, a SwiftData insert-walk regression suite, and the
-  router eval.
+  streaming chunk clock, a SwiftData insert-walk regression suite, the
+  router eval, the tool-trimming recall eval, the v0.3 router constructions,
+  and the "ask your notes" eval (61 synthetic questions over 22 synthetic
+  notes: recall@1 and @3, answer-span hit rate, citation faithfulness and
+  span attribution).
 - Tests run serialized with a per-suite time limit. Each test keeps its
   in-memory `ModelContainer` alive explicitly, because a `ModelContext`
   does not retain its container.
@@ -383,7 +441,16 @@ the test host, so tests exercise keyword search only.
 - `.github/workflows/ci.yml` runs on every pull request and push to `main`:
   a Linux hygiene scan, then XcodeGen and `xcodebuild test` on the newest
   Xcode on a `macos-26` runner against an iPhone simulator. The job summary
-  shows the test count and the eval table.
+  shows the test count and the eval table. A second step re-runs only
+  the RAG eval with the sentence-embedding asset allowed
+  (`PB_EMBEDDING_EVAL=1`, `continue-on-error`), so semantic and hybrid
+  retrieval are measured when the runner has the asset and reported as
+  skipped when it does not.
+- Every eval prints `EVALJSON` lines. `.github/workflows/pages.yml` runs
+  after a successful CI run on `main`, downloads that run's build logs, and
+  `scripts/build_site.py` renders the docs site (overview, eval tables,
+  architecture, product brief, verification) to the `gh-pages` branch. The
+  site never contains a hand-typed number.
 
 What CI cannot cover: the Foundation Models path (including guided-
 generation planning and grounded answers) needs an Apple Intelligence

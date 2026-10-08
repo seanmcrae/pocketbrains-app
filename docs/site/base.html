@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<meta name="description" content="PocketBrains: a private chief of staff for tasks, projects and notes, run by an AI agent that lives entirely on the iPhone.">
+<link rel="canonical" href="{{ pages_url }}">
+<style>{{ css | safe }}</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="index.html">PocketBrains</a>
+    <nav>
+      <a href="index.html#evaluation">Evaluation</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="product.html">Product brief</a>
+      <a href="verification.html">Verification</a>
+      <a href="{{ repo_url }}">GitHub</a>
+    </nav>
+  </div>
+</header>
+<main>
+{% block main %}{% endblock %}
+</main>
+<footer class="wrap footer">
+  <p>PocketBrains {{ version }} &middot; Sean McRae &middot; <a href="{{ repo_url }}">Source on GitHub</a>.
+  No license has been chosen yet; the code is published for review.
+  Every number on this site is parsed from a CI build log of the iOS test suite on the bundled
+  synthetic corpora{% if run_id %} (<a href="{{ repo_url }}/actions/runs/{{ run_id }}">run {{ run_id }}</a>){% endif %}.</p>
+</footer>
+{% if mermaid %}<script type="module">
+  // Diagrams render when the CDN is reachable; otherwise their source stays readable.
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+</script>{% endif %}
+</body>
+</html>
