@@ -60,7 +60,7 @@ struct IntentEvalCase {
 }
 
 enum IntentEvalCorpus {
-    static let cases: [IntentEvalCase] = v1 + canonicalV2 + compound + paraphraseV2 + heldout + heldoutV3
+    static let cases: [IntentEvalCase] = v1 + canonicalV2 + compound + paraphraseV2 + heldout + devV3 + heldoutV3
 
     // MARK: - v0.1 corpus (unchanged utterances and expectations)
 
