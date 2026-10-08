@@ -27,6 +27,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Scan tracked files for paths, credentials and large binaries
         run: ./scripts/check-hygiene.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Docs site builds (no CI log, so tables show a notice)
+        run: |
+          pip install -r docs/site/requirements.txt
+          python scripts/build_site.py --out site
 
   ios:
     name: Build and test (iOS 26 Simulator)
