@@ -4,13 +4,14 @@
 
 # PocketBrains
 
-**A private chief of staff for your tasks, projects and notes, run by an
-AI agent that lives entirely on your iPhone.** Say what you need in one
-thread; a 24-tool agent plans multi-step requests, acts on a local
-SwiftData store, answers questions from your notes with citations, and
-can undo anything it did, using Apple's on-device model, an optional open
-model, or a deterministic parser when neither is available. Nothing leaves
-the phone.
+**For people whose work can't go into a cloud chatbot, PocketBrains answers
+one question: is an AI agent that never leaves the iPhone good enough to
+run your tasks, projects and notes?** Its evals say exactly how far the
+on-device version gets today. Say what you need in one thread; a 24-tool
+agent plans multi-step requests, acts on a local SwiftData store, answers
+questions from your notes with citations, and can undo anything it did,
+using Apple's on-device model, an optional open model, or a deterministic
+parser when neither is available. Nothing leaves the phone.
 
 [![CI](https://github.com/seanmcrae/pocketbrains-app/actions/workflows/ci.yml/badge.svg)](https://github.com/seanmcrae/pocketbrains-app/actions/workflows/ci.yml)
 ![iOS 26](https://img.shields.io/badge/iOS-26-black)
@@ -40,17 +41,10 @@ verification checklist).
   build running Qwen3-4B, and a deterministic planner and router that
   always work, so the product never shows "AI unavailable". Every
   mutation is journaled with its inverse, so every action is undoable.
-- **How it is measured:** a reproducible eval of 243 synthetic utterances
-  runs on every CI build. The deterministic floor scores **100%
-  end-to-end on canonical and multi-step phrasing** (gated) and
-  **39.6% end-to-end on a held-out paraphrase split** written and frozen
-  before the v0.3 router work and never used to tune it (30.2% before
-  that work). That held-out number is the honest measure of the floor,
-  and the gap the language-model tiers exist to close. Per-request tool
-  trimming keeps the right tool in the Foundation Models brain's set for
-  96.3% of all cases (90.6% held-out) while offering 8 of 24 tools at
-  most; cited note answers retrieve the right note in the top 3 for 96.7%
-  of 61 synthetic questions, and every citation maps to its source.
+- **How it is measured:** three synthetic evals run on every CI build;
+  the headline figures are in [Numbers](https://github.com/seanmcrae/pocketbrains-app#numbers) and the misses in
+  [Where it fails](https://github.com/seanmcrae/pocketbrains-app#where-it-fails). No Foundation Models or MLX accuracy
+  is claimed yet.
 - **Product docs:** [docs/PRODUCT.md](docs/PRODUCT.md) has the problem,
   users, jobs to be done, metrics, local-versus-cloud trade-offs, decisions
   and roadmap.
@@ -61,6 +55,29 @@ verification checklist).
 > **Demo:** a short device recording (plan card, Undo, cited answer) will
 > go here as `docs/img/demo.gif`. Screenshots are not yet in the
 > repository either; see [Screenshots](#screenshots).
+
+## Numbers
+
+From the committed eval results: CI [run 37723402205](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37723402205)
+(v0.3), against [run 37721075662](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37721075662)
+(the same branch before any router change). Deterministic brain, tool
+trimmer and extractive retrieval only; all corpora synthetic.
+
+| Measure | Eval set | v0.3 | Baseline |
+|---|---|---|---|
+| **Held-out paraphrases, end-to-end** (never tuned on) | 53 utterances | **39.6%** | 30.2% before v0.3 router work |
+| Older held-out split, end-to-end (score published with v0.2) | 34 | 47.1% | 35.3% |
+| Canonical + compound phrasing, end-to-end (gated) | 71 | 100% | 100% |
+| All router cases, end-to-end | 243 | 79.4% | 56.0% |
+| Tool trimming recall@8, all / held-out | 243 / 53 | 96.3% / 90.6% | full 24-tool catalog (100% by definition) |
+| Ask your notes, BM25 recall@1 / recall@3 | 61 questions, 22 notes | 93.4% / 96.7% | none: semantic and hybrid skipped in CI |
+| Citation faithfulness, extractive answers | 130 markers | 100% (by construction) | |
+| Routing + execution latency, CI simulator | all router cases | p50 7.46 ms, p95 21.74 ms | 6.22 / 22.88 ms |
+| Cost per 1k requests | | none: on-device, no backend | per-token for a cloud assistant |
+| Tests | | 129 in 18 suites | 112 in 15 |
+
+Latency moves between runner instances: the post-merge main run
+(37727772426, on the docs site) measured p50 9.38 ms, p95 47.13 ms.
 
 ## Architecture
 
@@ -326,6 +343,49 @@ than showing quality; it covers the extractive answer only, not
 model-written answers (issue #7). The original 12-question retrieval test
 still reports recall@1 91.7%, recall@3 91.7% on the BM25 path.
 
+## Where it fails
+
+The biggest gap is **held-out routing**. On the 53 frozen v0.3 held-out
+paraphrases the deterministic brain picks the right tool for 25 (47.2%)
+and gets the whole request right for 21 (39.6%). 32 miss: 28 choose the
+wrong tool or none, and 4 choose the right tool but leave the wrong state
+(a title, a date, a filing). The older 34-utterance held-out split misses
+18 (47.1% end to end). Held-out misses are counted but never itemized, by
+design, so the corpus can't be tuned against; the slices below are what
+the evals report.
+
+**Design and scaffolding limits (deterministic floor, measured)**
+
+| Failure | Slice | Evidence |
+|---|---|---|
+| Off-grammar phrasing misses the right tool | v0.3 held-out | 28 of 53 wrong tool; tool accuracy 47.2% |
+| Right tool, wrong arguments or end state | v0.3 held-out | 4 of 53 (tool 47.2% vs end-to-end 39.6%) |
+| Compound requests split only before a command verb | compound phrasing off the grammar | documented router rule; the 12 gated compound cases all pass |
+| "Next Tuesday" means the coming Tuesday | relative dates | documented `NaturalDateParser` behaviour |
+| Trimming drops the needed tool | v0.3 held-out | 5 of 53 at k = 8, 7 at k = 6; v0.2 held-out 4 of 34 at k = 8 |
+| Retrieval misses the relevant note | 61 RAG questions | 2 outside the top 3, 4 outside the top 1 (BM25) |
+| Tail latency varies by runner | all router cases | p95 21.74 ms on the v0.3 run, 47.13 ms on main, against a 50 ms target ([#15](https://github.com/seanmcrae/pocketbrains-app/issues/15)) |
+| Blocker lookup is quadratic in task count | project views | `TaskItem.blockers` fetches every task ([#10](https://github.com/seanmcrae/pocketbrains-app/issues/10)) |
+
+**Model and data limits (not yet measured)**
+
+| Gap | Why it is open | Tracked |
+|---|---|---|
+| Foundation Models and MLX accuracy | needs Apple Intelligence hardware or the MLX build | [#5](https://github.com/seanmcrae/pocketbrains-app/issues/5) |
+| Whether trimming helps the model | recall is measured, the model's response to a smaller schema is not | [#6](https://github.com/seanmcrae/pocketbrains-app/issues/6) |
+| Faithfulness of model-written cited answers | only the extractive path is checked, and it is faithful by construction | [#7](https://github.com/seanmcrae/pocketbrains-app/issues/7) |
+| Semantic and hybrid retrieval | the CI runner has no sentence-embedding asset | [#13](https://github.com/seanmcrae/pocketbrains-app/issues/13) |
+| Independence of the held-out splits | one author wrote the held-out splits, the dev split and the rules | [#14](https://github.com/seanmcrae/pocketbrains-app/issues/14) |
+| Real phrasing | every corpus is synthetic; there are no users or telemetry | |
+
+**Rejected: adding rules until the held-out misses pass.** The v0.3
+router gained frames for general constructions ("X is done", "can X slip
+to Y") tuned on the dev split only. Dev went from 5.9% to 100% while
+held-out moved 9.4 points. Writing a rule per remaining miss would raise
+the held-out number and destroy what it measures, so those 32 cases are
+left to the language-model tiers ([docs/PRODUCT.md](docs/PRODUCT.md),
+"v0.3 trade-offs").
+
 ## Build and run
 
 Requirements: a Mac with Xcode 26 (iOS 26 SDK) and
@@ -391,24 +451,19 @@ every number on it comes from a CI log.
   has been run on the iOS 26 simulator; the Foundation Models path,
   including guided-generation planning, has not been verified on device in
   this repository (see [docs/VERIFICATION.md](docs/VERIFICATION.md)).
-- **The deterministic floor is still rigid off-grammar.** 39.6% end to
-  end on the frozen v0.3 held-out paraphrases. Compound splitting only
-  happens before a command verb, and "next Tuesday" means the coming
-  Tuesday.
+- **The deterministic floor is rigid off-grammar**: 39.6% end to end on
+  the frozen v0.3 held-out paraphrases (see [Where it fails](https://github.com/seanmcrae/pocketbrains-app#where-it-fails)).
 - **Tool budget on the ~3B model.** By default Foundation Models sees 22
   tools (24 with both integrations on). Per-request trimming exists but
-  ships off: its recall is measured in CI, its effect on the model is
-  not, and a trimmed session does not carry multi-turn context.
-- **Semantic and hybrid retrieval are unmeasured in CI**: the runner has
-  no sentence-embedding asset, so only the BM25 path has numbers.
+  ships off, and a trimmed session does not carry multi-turn context.
 - **Integrations are untested on device.** EventKit is covered by mapping
   tests behind protocols; the permission flows, Siri phrases and the
   widget need a device or simulator run by hand. The widget needs the App
   Group capability when signed.
 - **MLX is opt-in and not compiled in CI.** Its tool-call parser,
   including multi-call plans, is tested.
-- **English only**, fixed type sizes (Dynamic Type mapping is pending),
-  and the VoiceOver pass is incomplete.
+- **English only**, fixed type sizes (Dynamic Type mapping is pending,
+  #8), and the VoiceOver pass is incomplete.
 - **Semantic search and passage embeddings** are brute-force cosine over a
   personal-scale corpus and are disabled under the test host, so tests
   cover the keyword path.
@@ -454,6 +509,13 @@ docs/             PRODUCT, ARCHITECTURE, DESIGN, VERIFICATION, LAUNCH, QA_REPORT
   site/           docs-site templates and pinned Python requirements
 scripts/          hygiene check, dev helpers, build_site.py (docs site from CI logs)
 ```
+
+## How this was built
+
+Code was written with AI coding agents under my direction. I set the
+problem, success metrics and eval gates, and decided what shipped. Every
+number here comes from the committed eval suites and is reproduced in CI;
+the docs site is generated from the CI logs.
 
 ## Contributing and security
 
