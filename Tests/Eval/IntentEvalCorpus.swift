@@ -132,7 +132,15 @@ enum IntentEvalCorpus {
         .init(utterance: "Notes about pricing", category: .paraphrase, tool: "searchNotes", origin: .v1),
         .init(utterance: "Write down that the client wants a demo next week", category: .paraphrase, tool: "createNote", origin: .v1),
         .init(utterance: "Connect pricing research to Q3 planning", category: .paraphrase, tool: "linkItems", origin: .v1),
-        .init(utterance: "Push send the invoice to Monday", category: .paraphrase, tool: "updateTask", origin: .v1),
+        // Expectation corrected in v0.3 (was updateTask). v0.1 had no
+        // rescheduleTask, so a date move could only be an update. v0.2 added
+        // rescheduleTask for exactly this job ("push X to <date>" is the
+        // reschedule verb plus a date), and updateTask stays the tool for
+        // changing several fields or the project at once. The router did not
+        // change; the expectation was wrong for a 24-tool agent. The target
+        // check now also verifies the task actually lands on Monday.
+        .init(utterance: "Push send the invoice to Monday", category: .paraphrase, tool: "rescheduleTask", origin: .v1,
+              target: "Send the invoice", targetDue: .nextWeekday(2)),
         .init(utterance: "Add a milestone Beta launch to website redesign", category: .paraphrase, tool: "addMilestone", origin: .v1),
     ]
 
