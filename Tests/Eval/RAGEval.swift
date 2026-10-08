@@ -121,9 +121,10 @@ struct RAGEval {
         // a sentence from note n), so anything below 100% is a bug.
         #expect(result.faithfulMarkers == result.markers)
         #expect(result.markers > 0)
-        // Regression floors, set below the first measured CI values.
-        #expect(result.rate(result.hitsAt3, result.n) >= 0.7)
-        #expect(result.rate(result.hitsAt1, result.n) >= 0.6)
+        // Regression floors, set just below the first measured CI values
+        // (run 37722168758: recall@1 93.4%, recall@3 96.7%).
+        #expect(result.rate(result.hitsAt3, result.n) >= 0.9)
+        #expect(result.rate(result.hitsAt1, result.n) >= 0.85)
     }
 
     @Test func semanticAndHybrid() {

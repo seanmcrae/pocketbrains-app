@@ -152,7 +152,8 @@ extension CommandFrames {
 
         // Quoted text into a named note: "tack 'Ana joins in March' onto the
         // meeting notes", "put 'parking is free' in the offsite plan note".
-        if let g = match(politeness + #"(?:add|append|tack|put|stick|pop|include|write) ['"‘“](.+?)['"’”] (?:on|onto|in|into|to|at the end of) (?:the |my )?(.+?)(?: note| notes)?$"#, text) {
+        if let g = match(politeness + #"(?:add|append|tack|put|stick|pop|include|write) ['"‘“](.+?)['"’”] (?:on|onto|in|into|to|at the end of) (?:the |my )?(.+?)(?: note| notes)?$"#, text),
+           g[1].lowercased().range(of: #"^(?:list|to-?do list|todo list|todos|tasks|task list)$"#, options: .regularExpression) == nil {
             return ParsedIntent(tool: "appendNote", arguments: ["query": g[1], "text": g[0]])
         }
         if let g = match(politeness + #"(?:append|tack|stick|pop) (.+?) (?:on|onto|in|into|to) (?:the |my )?(.+?) (?:note|notes)$"#, text) {
