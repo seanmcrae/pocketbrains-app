@@ -17,6 +17,11 @@ the phone.
 ![Swift](https://img.shields.io/badge/Swift-5.10-orange)
 ![Inference](https://img.shields.io/badge/inference-on--device-gold)
 ![Network](https://img.shields.io/badge/network%20calls-none-green)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://seanmcrae.github.io/pocketbrains-app/)
+
+**Docs site:** [seanmcrae.github.io/pocketbrains-app](https://seanmcrae.github.io/pocketbrains-app/)
+(overview, eval tables generated from CI, architecture, product brief,
+verification checklist).
 
 ## In 60 seconds
 
@@ -35,19 +40,27 @@ the phone.
   build running Qwen3-4B, and a deterministic planner and router that
   always work, so the product never shows "AI unavailable". Every
   mutation is journaled with its inverse, so every action is undoable.
-- **How it is measured:** a reproducible eval of 139 synthetic utterances
+- **How it is measured:** a reproducible eval of 243 synthetic utterances
   runs on every CI build. The deterministic floor scores **100%
-  end-to-end on canonical and multi-step phrasing** (gated),
-  **97.5% on the original 40-utterance corpus** (77.5% in v0.1), and
-  **35.3% on a held-out paraphrase split** it was never tuned on. That
-  last number is the honest measure of the floor, and the gap the
-  language-model tiers exist to close.
+  end-to-end on canonical and multi-step phrasing** (gated) and
+  **39.6% end-to-end on a held-out paraphrase split** written and frozen
+  before the v0.3 router work and never used to tune it (30.2% before
+  that work). That held-out number is the honest measure of the floor,
+  and the gap the language-model tiers exist to close. Per-request tool
+  trimming keeps the right tool in the Foundation Models brain's set for
+  96.3% of all cases (90.6% held-out) while offering 8 of 24 tools at
+  most; cited note answers retrieve the right note in the top 3 for 96.7%
+  of 61 synthetic questions, and every citation maps to its source.
 - **Product docs:** [docs/PRODUCT.md](docs/PRODUCT.md) has the problem,
   users, jobs to be done, metrics, local-versus-cloud trade-offs, decisions
   and roadmap.
 
-> Screenshots from a device are not yet in the repository; see
-> [Screenshots](#screenshots).
+<!-- Demo GIF goes here once recorded on a device:
+     docs/img/demo.gif, about 15 seconds: a multi-step plan card, Undo,
+     then a cited "ask your notes" answer. -->
+> **Demo:** a short device recording (plan card, Undo, cited answer) will
+> go here as `docs/img/demo.gif`. Screenshots are not yet in the
+> repository either; see [Screenshots](#screenshots).
 
 ## Architecture
 
@@ -174,70 +187,144 @@ canonical split of the eval.
 | `recall` | Search past conversation and completed work | "When did I book flights?" |
 | `undo` | Revert the last request (whole plan) or only the last action | "Undo that" |
 
+With "Focused tool list" on (Settings, Intelligence; off by default),
+the Foundation Models brain is offered only the tools `ToolSelector`
+picks for each request, at most 8, always including `createTask`,
+`searchEverything`, `agenda` and `undo`. See [Evaluation](#evaluation)
+for how often the needed tool survives the trim.
+
 The agent still has no delete tools, by design: a misread request or
 injected note content cannot destroy data, and anything it creates or
 changes can be undone.
 
 ## Evaluation
 
-`Tests/Eval` runs every utterance in a **synthetic** corpus (written for
-the eval; no real user data) through the deterministic brain's real entry
-point (`IntentFallbackBackend.routeTurn`, which plans compound requests)
-against a freshly seeded in-memory store, and scores tool choice (for
-compound requests, the exact tool sequence) and end-to-end correctness
-(every call succeeded and the resulting state is right: title, due date,
-priority, repeat rule, completion, filing, note text). It runs on every CI
-build and prints its table to the job summary.
+Three evals run on every CI build, inside the iOS test suite on the
+simulator, and print `EVAL` lines (a human-readable table) and `EVALJSON`
+lines (read by the docs site). Every corpus is **synthetic**: written for
+the eval, with no real user data. Numbers below are copied from CI logs;
+each column names its run. They describe the deterministic brain, the
+tool trimmer and the extractive retrieval path. **No Foundation Models or
+MLX accuracy is claimed**: those need Apple Intelligence hardware or the
+MLX build (roadmap issue #5).
 
-The corpus has 139 utterances in five splits. The **original 40** (v0.1)
-keep their exact utterances and expectations. v0.2 adds **canonical**
-phrasing for the new tools (30), **compound** multi-step requests (12),
-**dev paraphrases** the router may be tuned on (23), and a **held-out**
-paraphrase split (34) that was committed before any v0.2 router work and
-never used to tune rules; its misses are counted but not printed, so they
-cannot leak into rule-writing. Caveat: the same author wrote the held-out
-set and the rules, so it is less independent than user data would be.
+### Router (deterministic brain)
 
-Results from CI on the iPhone 17 Pro simulator, Xcode 26.6
-(tool accuracy / end-to-end):
+`Tests/Eval` runs each utterance through the deterministic brain's real
+entry point (`IntentFallbackBackend.routeTurn`, which plans compound
+requests) against a freshly seeded in-memory store. Tool accuracy: the
+expected tool (for compound requests, the exact sequence). End-to-end:
+right tool, every call succeeded, and the resulting state is right
+(title, due date, priority, repeat rule, completion, filing, note text).
 
-| Split | n | v0.1 router ([run 37644353241](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37644353241)) | Before router upgrade ([run 37650929852](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37650929852)) | v0.2 ([run 37652691087](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37652691087)) |
-|---|---|---|---|---|
-| Original canonical | 29 | 100% / 100% | 100% / 100% | **100% / 100%** |
-| Original paraphrase | 11 | 18.2% / 18.2% | 18.2% / 18.2% | **90.9% / 90.9%** |
-| Original 40, overall | 40 | 77.5% / 77.5% | 77.5% / 77.5% | **97.5% / 97.5%** |
-| v0.2 canonical | 30 | n/a | 36.7% / 20.0% | **100% / 100%** |
-| v0.2 compound | 12 | n/a | 58.3% / 58.3% | **100% / 100%** |
-| v0.2 dev paraphrase | 23 | n/a | 0% / 0% | **100% / 100%** |
-| v0.2 held-out paraphrase | 34 | n/a | 11.8% / 11.8% | **38.2% / 35.3%** |
-| All | 139 | n/a | 38.1% / 34.5% | **84.2% / 83.5%** |
+How the splits may be used:
 
-"Before router upgrade" is the v0.2 branch with the multi-step planner and
-the new tools already in place, but the v0.1 grammar and date parser; it
-isolates what the lexicon, lemma and slot-frame work bought. The one
-remaining miss on the original 40 is "Push send the invoice to Monday",
-which v0.2 routes to the new `rescheduleTask` rather than the expected
-`updateTask`; the task does move to Monday, but the expectation is kept
-as written.
+- **Gated** (must stay at 100% end-to-end or CI fails): v1 canonical,
+  v2 canonical and v2 compound (71 cases).
+- **Dev** (rules may be tuned on them; misses are printed): the v1 and
+  v2 paraphrase splits from earlier releases, and the new **v0.3 dev**
+  split (51), the only split v0.3 tuned on.
+- **Held-out** (never tuned on; misses counted, never itemized):
+  **v0.3 held-out (frozen)** (53), written in one sitting and committed
+  before any v0.3 router change, so its first CI run is the honest
+  "before"; and **v0.2 held-out (reported)** (34), frozen as it was,
+  but its score was published with v0.2, so it is a secondary signal.
 
-The gate: every canonical and compound case (71) must pass end to end, or
-CI fails. Paraphrase splits are reported, not gated.
+Caveat: one author wrote the held-out splits, the dev split and the
+rules, so the held-out numbers are less independent than real user data
+would be. The dev split was written after the held-out split, in a
+different register, rather than mirroring it, and frames were added only
+for constructions that dev misses showed.
+
+Results on the iPhone 17 Pro simulator, Xcode 26.6 (tool accuracy /
+end-to-end). "v0.2 on main" is [run 37708520476](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37708520476) (139-utterance
+corpus); "Before" is [run 37721075662](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37721075662), the v0.3 branch with
+the new splits and no router change; "v0.3" is [run 37723402205](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37723402205).
+
+| Split | Role | n | v0.2 on main | Before | v0.3 |
+|---|---|---|---|---|---|
+| v1 canonical | gated | 29 | 100% / 100% | 100% / 100% | **100% / 100%** |
+| v1 paraphrase | dev (v0.2) | 11 | 90.9% / 90.9% | 100% / 100% | **100% / 100%** |
+| v2 canonical | gated | 30 | 100% / 100% | 100% / 100% | **100% / 100%** |
+| v2 compound | gated | 12 | 100% / 100% | 100% / 100% | **100% / 100%** |
+| v2 dev paraphrase | dev (v0.2) | 23 | 100% / 100% | 100% / 100% | **100% / 100%** |
+| v0.2 held-out (reported) | held-out | 34 | 38.2% / 35.3% | 38.2% / 35.3% | **50.0% / 47.1%** |
+| v0.3 dev paraphrase | dev (v0.3) | 51 | n/a | 5.9% / 5.9% | **100% / 100%** |
+| **v0.3 held-out (frozen)** | **held-out** | 53 | n/a | 37.7% / 30.2% | **47.2% / 39.6%** |
+| Original 40 (v1) | | 40 | 97.5% / 97.5% | 100% / 100% | **100% / 100%** |
+| Overall | | 243 | n/a (139 then) | 58.0% / 56.0% | **81.5% / 79.4%** |
+
+The v1 paraphrase change from "v0.2 on main" to "Before" is not a router
+change. "Push send the invoice to Monday" expected `updateTask`, written
+for v0.1, which had no reschedule tool. v0.2 added `rescheduleTask` for
+exactly this request ("push X to a date"), and the router already chose
+it and moved the task to Monday. v0.3 changes the expectation to
+`rescheduleTask`, adds a check that the task lands on Monday, and records
+the reason in the corpus. `updateTask` remains the tool for changing
+several fields or the project at once.
+
+Read the two kinds of rows differently. Dev rows going from 5.9% to 100%
+show the rules now cover the constructions they were written for; they
+say little about new phrasing. The held-out rows (30.2% to 39.6% on
+v0.3, 35.3% to 47.1% on v0.2) are what the v0.3 constructions bought on
+phrasing they never saw. 32 of 53 v0.3 held-out utterances still miss end
+to end; that is the language-model tiers' job, and adding rules until
+they pass would only move the overfit.
 
 Routing plus tool execution latency on the CI simulator (in-memory
-store), from the v0.2 run: p50 6.8 ms, p95 25.7 ms (v0.1 baseline run:
-p50 2.5 ms, p95 7.3 ms). The increase comes from NLTagger tokenization and
-lemmatization; latency varies between runner instances, while accuracy is
+store), run 37723402205: p50 7.46 ms, p95 21.74 ms (run 37721075662: p50 6.22 ms,
+p95 22.88 ms). Latency varies between runner instances; accuracy is
 deterministic.
 
-"Ask your notes" retrieval on its own 12-question synthetic corpus, BM25
-path (the test host has no embedding asset): recall@1 91.7%, recall@3
-91.7%. The miss is a vocabulary-mismatch question ("how should our copy
-sound?" for a note on brand voice) that the embedding half of the hybrid
-is there to catch on device.
+### Tool trimming for the Foundation Models brain
 
-What this eval does **not** measure: the Foundation Models and MLX brains,
-including their planning. They need Apple Intelligence hardware or the
-MLX build, so no model accuracy or latency numbers are claimed here.
+`ToolSelector` picks the tools offered to the on-device model per
+request (grammar parse, lexicon verbs, cue words and dates; core tools
+always in; at most k). The metric is recall@k: the share of corpus cases
+whose expected tool, or every step of a compound request, is inside the
+trimmed set, with all 24 tools available. It measures the trim, not the
+model. The selector reuses the deterministic grammar, so gated and dev
+rows are not independent of it; the held-out rows are the meaningful
+ones. [Run 37723402205](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37723402205):
+
+| Split | n | recall@6 | recall@8 |
+|---|---|---|---|
+| Gated (v1 canonical, v2 canonical, v2 compound) | 71 | 100% | 100% |
+| Dev (v1, v2 and v0.3 paraphrase) | 85 | 100% | 100% |
+| v0.2 held-out (reported) | 34 | 82.4% | 88.2% |
+| **v0.3 held-out (frozen)** | 53 | **86.8%** | **90.6%** |
+| Overall | 243 | 94.7% | 96.3% |
+
+At k = 8 the selector offers 6.3 tools on average (of 24), because only
+tools with a positive score fill the room after the four core tools.
+Whether the smaller schema improves the model's tool choice or latency is
+unmeasured until an on-device run (issue #6), so the switch ships off.
+
+### Ask your notes (retrieval and citations)
+
+`Tests/Eval/RAGEval` asks 61 synthetic questions over a 22-note
+synthetic fixture (`RAGEvalFixture`), each with one relevant note and an
+answer span copied from it; several notes share vocabulary on purpose,
+and 5 questions use different words from their note. Recall@k: the
+relevant note is among the notes of the top k passages. Citation
+faithfulness: every `[n]` in the extractive answer follows a sentence
+found in a retrieved passage of note n. Span attribution: when the answer
+contains the span, its `[n]` points at a passage that contains it.
+[Run 37723402205](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37723402205):
+
+| Method | n | recall@1 | recall@3 | Answer contains span | Citation faithfulness | Span attribution |
+|---|---|---|---|---|---|---|
+| BM25 | 61 | 93.4% | 96.7% | 96.7% | 100% (130 markers) | 100% |
+| Semantic, hybrid | | skipped | | | | |
+
+Semantic and hybrid retrieval run in a separate CI step that allows the
+NLEmbedding sentence asset; on the GitHub macOS runner the asset is
+reported unavailable, so that step prints "skipped" instead of a number.
+Faithfulness is 100% by construction (the composer attaches each `[n]` to
+a sentence from note n), so the check guards against regressions rather
+than showing quality; it covers the extractive answer only, not
+model-written answers (issue #7). The original 12-question retrieval test
+still reports recall@1 91.7%, recall@3 91.7% on the BM25 path.
 
 ## Build and run
 
@@ -248,7 +335,7 @@ generated from `project.yml` and is not committed.
 ```bash
 brew install xcodegen
 git clone https://github.com/seanmcrae/pocketbrains-app.git
-cd pocketbrains
+cd pocketbrains-app
 xcodegen generate
 open PocketBrains.xcodeproj
 ```
@@ -276,21 +363,27 @@ xcodebuild test -project PocketBrains.xcodeproj -scheme PocketBrains \
 
 ## Tests and CI
 
-112 Swift Testing tests in 15 suites (v0.1: 55 in 10, per the CI logs)
-cover natural-language date parsing (against now and a fixed reference
-date), every `ToolBox` operation, the tool registry and the prompted
-tool-call parser, planning, argument passing, failure handling and undo,
-chunking, BM25 recall@k, citation mapping and incremental indexing,
-EventKit mapping behind mocks, the widget snapshot, recurrence, intent
-routing, the knowledge-graph layout, the streaming text clock, a SwiftData
-regression walk for iOS 26 runtime traps, and the eval.
+129 Swift Testing tests in 18 suites ([run 37723402205](https://github.com/seanmcrae/pocketbrains-app/actions/runs/37723402205); v0.2:
+112 in 15; v0.1: 55 in 10) cover natural-language date parsing (against
+now and a fixed reference date), every `ToolBox` operation, the tool
+registry and the prompted tool-call parser, planning, argument passing,
+failure handling and undo, chunking, BM25 recall@k, citation mapping and
+incremental indexing, EventKit mapping behind mocks, the widget snapshot,
+recurrence, intent routing and the v0.3 router constructions,
+`ToolSelector`, the knowledge-graph layout, the streaming text clock, a
+SwiftData regression walk for iOS 26 runtime traps, and the three evals.
 
-[CI](.github/workflows/ci.yml) runs on every pull request and push to
-`main`: a Linux job scans the tree for home-directory paths, credentials
-and large files ([scripts/check-hygiene.sh](scripts/check-hygiene.sh)),
-then a `macos-26` job generates the project (app, Today widget extension
-and tests) and runs the full suite on an iPhone simulator with the newest
-installed Xcode.
+[CI](.github/workflows/ci.yml) runs on every pull request to `main`, every
+push to `main`, and on demand: a Linux job scans the tree for
+home-directory paths, credentials and large files
+([scripts/check-hygiene.sh](scripts/check-hygiene.sh)) and checks that the
+docs site builds; a `macos-26` job generates the project (app, Today widget
+extension and tests), runs the full suite on an iPhone simulator with the
+newest installed Xcode, then re-runs the RAG eval with the embedding asset
+allowed. [Pages](.github/workflows/pages.yml) runs after CI succeeds on
+`main`: it downloads that run's build logs and
+[scripts/build_site.py](scripts/build_site.py) publishes the docs site, so
+every number on it comes from a CI log.
 
 ## Limitations
 
@@ -298,12 +391,16 @@ installed Xcode.
   has been run on the iOS 26 simulator; the Foundation Models path,
   including guided-generation planning, has not been verified on device in
   this repository (see [docs/VERIFICATION.md](docs/VERIFICATION.md)).
-- **The deterministic floor is still rigid off-grammar.** 35.3% end to
-  end on held-out paraphrases. Compound splitting only happens before a
-  command verb, and "next Tuesday" means the coming Tuesday.
-- **Tool budget on the ~3B model.** Foundation Models sees 22 tools (24
-  with both integrations on). That is a lot of schema for a small context
-  window; trimming per request is on the roadmap.
+- **The deterministic floor is still rigid off-grammar.** 39.6% end to
+  end on the frozen v0.3 held-out paraphrases. Compound splitting only
+  happens before a command verb, and "next Tuesday" means the coming
+  Tuesday.
+- **Tool budget on the ~3B model.** By default Foundation Models sees 22
+  tools (24 with both integrations on). Per-request trimming exists but
+  ships off: its recall is measured in CI, its effect on the model is
+  not, and a trimmed session does not carry multi-turn context.
+- **Semantic and hybrid retrieval are unmeasured in CI**: the runner has
+  no sentence-embedding asset, so only the BM25 path has numbers.
 - **Integrations are untested on device.** EventKit is covered by mapping
   tests behind protocols; the permission flows, Siri phrases and the
   widget need a device or simulator run by hand. The widget needs the App
@@ -327,11 +424,13 @@ Knowledge constellation, and the in-app privacy receipt.
 
 ## Roadmap
 
-Now: run the 139-utterance eval on the Foundation Models brain on device
-(single-step and planned), publish tool-call accuracy and time to first
-token; trim the tool list per request. Next: Dynamic Type, VoiceOver,
-localization, an interactive widget. Later: opt-in private iCloud sync.
-Full roadmap and success metrics in [docs/PRODUCT.md](docs/PRODUCT.md).
+Now: measure the Foundation Models brain on device on the full corpus,
+including both held-out splits (#5); validate tool trimming on device and
+choose its default (#6); a hand-labelled faithfulness set for
+model-written cited answers (#7). Next: Dynamic Type and VoiceOver (#8),
+an interactive widget (#9), the blocker lookup (#10). Details in
+[ROADMAP.md](ROADMAP.md); product reasoning and success metrics in
+[docs/PRODUCT.md](docs/PRODUCT.md).
 
 ## Repository layout
 
@@ -340,7 +439,7 @@ Sources/
   App/            entry point, app model, thread/spaces shell, App Intents
   Agent/          ToolBox, registry, orchestrator, undo, dates, briefs
     Planner/      CompoundPlanner, PlanExecutor, plan model
-    Router/       IntentGrammar, CommandFrames, Lexicon
+    Router/       IntentGrammar, CommandFrames, ParaphraseFrames, Lexicon, ToolSelector
   Intelligence/   ModelBackend protocol, Foundation Models / MLX / fallback, embeddings
     Retrieval/    NoteChunker, BM25, NotesRAG (cited answers)
   Integrations/   EventKit bridge behind protocols, widget snapshot publisher
@@ -350,13 +449,15 @@ Sources/
   Features/       Thread, Today, Projects, Knowledge, Spaces, Settings, Privacy
 Shared/           code compiled into both the app and the widget (WidgetSnapshot)
 Widget/           Today widget extension (WidgetKit)
-Tests/            unit tests; Eval/ holds the synthetic corpus and eval harness
+Tests/            unit tests; Eval/ holds the synthetic corpora (router splits, RAG fixture) and evals
 docs/             PRODUCT, ARCHITECTURE, DESIGN, VERIFICATION, LAUNCH, QA_REPORT
+  site/           docs-site templates and pinned Python requirements
+scripts/          hygiene check, dev helpers, build_site.py (docs site from CI logs)
 ```
 
 ## Contributing and security
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and [ROADMAP.md](ROADMAP.md).
 Changes are logged in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
