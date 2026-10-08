@@ -33,11 +33,11 @@ enum CommandFrames {
         }
     }
 
-    private static func clean(_ prompt: String) -> String {
+    static func clean(_ prompt: String) -> String {
         prompt.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "?!.")))
     }
 
-    private static let politeness = #"^(?:(?:hey|ok|okay|so),?\s+)?(?:(?:can|could|would) you\s+|please\s+)?"#
+    static let politeness = #"^(?:(?:hey|ok|okay|so),?\s+)?(?:(?:can|could|would) you\s+|please\s+)?"#
 
     // MARK: - Slots
 
@@ -91,6 +91,7 @@ enum CommandFrames {
     // MARK: - Tier 2: commands
 
     static func commands(_ prompt: String) -> ParsedIntent? {
+        if let v3 = commandsV3(prompt) { return v3 }
         let text = clean(prompt)
         let lower = text.lowercased()
 
@@ -140,7 +141,7 @@ enum CommandFrames {
            Recurrence.parse(g[1]) != nil {
             return ParsedIntent(tool: "setRecurrence", arguments: ["query": g[0], "rule": g[1]])
         }
-        if let g = match(#"^i (?:want|need|have|would like) to (.+)$"#, text),
+        if let g = match(#"^i(?:'d| would)? (?:want|need|have|like|love) to (.+)$"#, text),
            Recurrence.phrase(in: g[0]) != nil {
             return ParsedIntent(tool: "createTask", arguments: taskSlots(g[0]))
         }
@@ -185,7 +186,7 @@ enum CommandFrames {
         }
 
         // Task capture rewordings: "add X to my list", "put X on my list"
-        if let g = match(politeness + #"(?:add|put) (.+?) (?:to|on|onto) (?:my |the )?(?:list|to-?do list|todo list|todos|tasks)(.*)$"#, text) {
+        if let g = match(politeness + #"(?:add|put|stick|pop|throw|chuck) (.+?) (?:to|on|onto) (?:my |the )?(?:list|to-?do list|todo list|todos|tasks)(.*)$"#, text) {
             return ParsedIntent(tool: "createTask", arguments: taskSlots(g[0] + " " + g[1]))
         }
 
@@ -222,7 +223,7 @@ enum CommandFrames {
         return nil
     }
 
-    private static func stripArticle(_ text: String) -> String {
+    static func stripArticle(_ text: String) -> String {
         for article in ["the ", "my ", "our "] where text.lowercased().hasPrefix(article) {
             return String(text.dropFirst(article.count))
         }
@@ -239,7 +240,7 @@ enum CommandFrames {
         guard case let (action, index)? = Lexicon.firstAction(in: tokens) else { return nil }
         // Everything after the verb (and a following particle) is the object.
         var start = tokens[index].range.upperBound
-        if index + 1 < tokens.count, ["off", "up", "out", "back", "down", "about"].contains(tokens[index + 1].word) {
+        if index + 1 < tokens.count, ["off", "up", "out", "back", "down", "about", "in"].contains(tokens[index + 1].word) {
             start = tokens[index + 1].range.upperBound
         }
         let object = String(text[start...]).trimmingCharacters(in: .whitespaces)
@@ -261,7 +262,12 @@ enum CommandFrames {
 
         switch action {
         case .complete:
-            return ParsedIntent(tool: "completeTask", arguments: ["query": stripArticle(object)])
+            // "tick the invoice off": a particle after the object is not part of it.
+            var query = object
+            for particle in [" off", " out", " up"] where query.lowercased().hasSuffix(particle) {
+                query = String(query.dropLast(particle.count))
+            }
+            return ParsedIntent(tool: "completeTask", arguments: ["query": stripArticle(query)])
         case .reschedule:
             if case let (head, prep, tail)? = split(object, on: ["to", "until", "till", "by", "for"]) {
                 let key = prep == "by" ? "by" : "to"
