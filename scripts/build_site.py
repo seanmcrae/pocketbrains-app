@@ -86,7 +86,12 @@ class EvalLog:
         return {(int(r["k"]), r["split"]): r for r in self.records if r.get("suite") == "trim"}
 
     def rag(self) -> list[dict[str, Any]]:
-        return [r for r in self.records if r.get("suite") == "rag"]
+        """One record per method; a later log (the embedding step) wins."""
+        by_method: dict[str, dict[str, Any]] = {}
+        for r in self.records:
+            if r.get("suite") == "rag":
+                by_method[r["method"]] = r
+        return list(by_method.values())
 
     def latency(self) -> dict[str, Any] | None:
         return next((r for r in self.records if r.get("suite") == "latency"), None)
@@ -181,9 +186,6 @@ def rag_table(log: EvalLog) -> tuple[Table | None, list[str]]:
         rows.append([r["method"], str(r["n"]), pct(r["recall_at_1"]), pct(r["recall_at_3"]),
                      pct(r["span_hit"]), f"{pct(r['citation_faithfulness'])} of {r['markers']}",
                      pct(r["span_attribution"])])
-    # A method measured in one log and skipped in another is not "skipped".
-    measured = {row[0] for row in rows}
-    notes = [n for n in notes if not any(f", {m}:" in n for m in measured)]
     if not rows:
         return None, notes
     table = Table(

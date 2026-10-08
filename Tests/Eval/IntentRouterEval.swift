@@ -226,7 +226,7 @@ struct IntentRouterEval {
             let (key, value) = field
             switch value {
             case let text as String: return "\"\(key)\":\"\(text)\""
-            case let number as Double: return "\"\(key)\":" + String(format: "%.4f", number)
+            case let number as Double: return "\"\(key)\":" + String(format: "%.6f", number)
             default: return "\"\(key)\":\(value)"
             }
         }.joined(separator: ",")
