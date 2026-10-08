@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PocketBrains: verification checklist</title>
+<meta name="description" content="PocketBrains: a private chief of staff for tasks, projects and notes, run by an AI agent that lives entirely on the iPhone.">
+<link rel="canonical" href="https://seanmcrae.github.io/pocketbrains-app/">
+<style>:root{--ink:#1d2733;--muted:#56657a;--line:#dde3ea;--soft:#f4f6f9;--accent:#9a6a12;--link:#1f5fa8;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:4rem}
+body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:#fff}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:0 1.25rem}
+.topbar{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.95);border-bottom:1px solid var(--line)}
+.topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;height:3.25rem}
+.brand{font-weight:700;color:var(--ink);font-family:var(--mono)}
+nav{display:flex;flex-wrap:wrap;gap:1.1rem;font-size:.92rem}nav a{color:var(--muted)}
+.hero{background:linear-gradient(180deg,var(--soft),#fff);padding:3.5rem 0 1rem;border-bottom:1px solid var(--line)}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;color:var(--accent);font-weight:600;margin:0}
+.hero h1{font-size:clamp(1.7rem,3.4vw,2.5rem);line-height:1.2;margin:.5rem 0 1rem;max-width:22em}
+.lede{font-size:1.1rem;color:var(--muted);max-width:44em}
+.cta{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.5rem 0}
+.button{display:inline-block;padding:.5rem 1rem;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font-weight:500}
+.button.primary{background:var(--ink);border-color:var(--ink);color:#fff}.button:hover{text-decoration:none;border-color:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin:2rem 0}
+.stat{background:#fff;border:1px solid var(--line);border-radius:8px;padding:1rem 1.1rem}
+.stat-label{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.stat-value{font-size:1.6rem;font-weight:700;font-family:var(--mono);margin:.2rem 0;overflow-wrap:anywhere}
+.stat-detail{font-size:.88rem;color:var(--muted)}
+figure{margin:1.5rem 0}figure img{max-width:100%;height:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
+figcaption{font-size:.88rem;color:var(--muted);margin-top:.5rem}
+.diagram img{padding:.75rem}
+.prose{padding-top:2.5rem}
+.prose h2{font-size:1.6rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+.prose h3{font-size:1.15rem;margin-top:1.8rem}
+.prose li{margin:.25rem 0}
+.note{color:var(--muted);font-size:.92rem}
+code{font-family:var(--mono);font-size:.88em;background:var(--soft);padding:.1em .3em;border-radius:4px}
+pre{background:#1d2733;color:#e8edf3;padding:1rem;border-radius:8px;overflow-x:auto;font-size:.85rem;line-height:1.5}
+pre code{background:none;padding:0;color:inherit;font-size:inherit}
+.table-scroll{overflow-x:auto}
+table{border-collapse:collapse;margin:1rem 0;font-size:.88rem;width:100%}
+th,td{border-bottom:1px solid var(--line);padding:.45rem .6rem;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{background:var(--soft);font-weight:600}
+.prose table th,.prose table td{text-align:left;white-space:normal}
+#results th,#results td{text-align:right;white-space:nowrap}
+#results th:first-child,#results td:first-child{text-align:left}
+details{margin:.5rem 0 1rem}summary{cursor:pointer;color:var(--muted);font-size:.9rem}
+.with-toc{display:grid;grid-template-columns:220px 1fr;gap:2.5rem;padding-top:2rem}
+.toc{position:sticky;top:4.5rem;align-self:start;font-size:.9rem}
+.toc ul{list-style:none;padding:0;margin:0}.toc li{margin:.35rem 0}
+.toc-title{font-weight:600;margin-top:0}
+.with-toc .prose{padding-top:0}.with-toc h1{margin-top:0}
+.footer{border-top:1px solid var(--line);margin-top:3rem;padding:1.5rem 1.25rem;color:var(--muted);font-size:.88rem}
+@media (max-width:760px){.with-toc{grid-template-columns:1fr}.toc{position:static}nav{gap:.7rem}.topbar-inner{height:auto;padding:.5rem 1.25rem}}
+.hero-head{display:flex;align-items:center;gap:1rem}.hero-head img{width:56px;height:56px;border-radius:12px}
+.tag{display:inline-block;font-size:.75rem;padding:.05rem .45rem;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.honest{border-color:#2f7d4f;color:#2f7d4f}.tag.tuned{border-color:#9a6a12;color:#9a6a12}.tag.gated{border-color:var(--ink);color:var(--ink)}
+pre.mermaid{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.callout{border-left:3px solid var(--accent);background:var(--soft);padding:.75rem 1rem;border-radius:0 6px 6px 0}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="index.html">PocketBrains</a>
+    <nav>
+      <a href="index.html#evaluation">Evaluation</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="product.html">Product brief</a>
+      <a href="verification.html">Verification</a>
+      <a href="https://github.com/seanmcrae/pocketbrains-app">GitHub</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<div class="wrap with-toc">
+  <aside class="toc">
+    <p class="toc-title">Verification checklist</p>
+    <ul><li><a href="#status-ci-green">Status: CI green</a></li><li><a href="#verified-by-construction">Verified by construction</a></li><li><a href="#known-api-hedges-check-these-first-on-mac">Known API hedges (check these first on Mac)</a></li><li><a href="#first-run-checklist-simulatordevice">First-run checklist (simulator/device)</a></li></ul>
+  </aside>
+  <article class="prose">
+    <h1>Verification checklist</h1>
+    <p>Honest accounting of what has and hasn't been verified, and the exact
+checklist for the first build on a Mac.</p>
+<h2 id="status-ci-green">Status: CI green</h2>
+<p>Every pull request and push to <code>main</code> <strong>builds and passes the full test suite</strong> on a macOS CI
+runner (XcodeGen → xcodebuild test on an iOS simulator), and the app has
+been run by hand on an iOS 26 simulator (thread, spaces, agent fallback,
+seeding all verified working).</p>
+<h3 id="lessons-banked-from-the-ci-debugging-campaign">Lessons banked from the CI debugging campaign</h3>
+<ol>
+<li><strong><code>ModelContext</code> does not retain its <code>ModelContainer</code>.</strong> Drop the
+   container and every later context operation traps (<code>EXC_BREAKPOINT</code>
+   via <code>swift_weakLoadStrong</code>) with no fatal message. Anything that holds
+   a context must also hold the container — tests pin it with
+   <code>withExtendedLifetime</code>.</li>
+<li>Swift Testing runs suites <strong>in parallel</strong> — the "last started" test in
+   a crash log is often an innocent bystander. Serialize before trusting
+   logs.</li>
+<li>A <strong>test host app must be inert</strong>: no Metal, no CoreMotion, no stores —
+   headless CI simulators have no GPU surface and runs wedge.</li>
+<li>String indices must never cross <code>lowercased()</code> copies (hardened
+   runtime traps); CI artifacts/job logs live on Azure blob storage that
+   restricted egress can't reach — publish failure logs to a git branch
+   instead.</li>
+</ol>
+<h2 id="verified-by-construction">Verified by construction</h2>
+<ul>
+<li>One write path: agent tools and views both mutate through <code>DataServices</code>;
+  <code>@Query</code>-driven views update automatically after any agent action.</li>
+<li>The zoom transition is driven by a single scalar (<code>AppModel.zoom</code> +
+  in-flight drag delta) — properties cannot desynchronize.</li>
+<li>Backend fallback chain never leaves the user without a working agent:
+  FoundationModels → (optional) MLX → deterministic intent parser.</li>
+<li>All Metal arithmetic keeps <code>half</code>/<code>float</code> types segregated (MSL does not
+  implicitly convert in <code>mix</code>/vector ops).</li>
+<li>No spacing, radius, color, or font outside the token system.</li>
+</ul>
+<h2 id="known-api-hedges-check-these-first-on-mac">Known API hedges (check these first on Mac)</h2>
+<ol>
+<li><strong>FoundationModels <code>Tool.call</code> return type</strong> — written as
+   <code>async throws -&gt; String</code>. If the SDK in use requires <code>ToolOutput</code>,
+   wrap each return: <code>ToolOutput(detail)</code>. One-line change per tool
+   (13 sites in <code>FoundationModelBackend.swift</code>).</li>
+<li><strong><code>LanguageModelSession(tools:instructions:)</code></strong> — instructions passed as
+   <code>String</code>. If the initializer wants an <code>Instructions</code> builder, change to
+   <code>LanguageModelSession(tools: t) { AgentVoice.instructions() }</code>.</li>
+<li><strong><code>streamResponse(to:)</code> element type</strong> — v0.2 reads <code>snapshot.content</code>
+   (v0.1 used <code>String(describing:)</code>, which rendered the snapshot struct
+   rather than its text). If the SDK in use exposes a different property,
+   this is the one line to change in <code>FoundationModelBackend.reply</code>.</li>
+<li><strong><code>@Generable</code> optional properties</strong> (<code>let due: String?</code>) — supported per
+   WWDC25/26 docs; if a seed rejects optionals, make them non-optional with
+   "" sentinel and <code>@Guide</code> text "empty string if unknown".</li>
+<li><strong>Self-referential SwiftData relationship</strong> (<code>TaskItem.blockedBy</code> /
+   <code>blocking</code> explicit inverse) — if the macro rejects the keypath, fall
+   back to storing <code>blockedByIDs: [UUID]</code> and resolving via fetch.</li>
+<li><strong><code>Text.Layout</code> iteration</strong> in <code>CondensationRenderer</code> follows the WWDC24
+   "Create custom visual effects" sample (<code>layout → line → run → slice</code>).</li>
+<li><strong>Guided-generation plans (v0.2)</strong> — <code>session.respond(to:generating:)</code>
+   with <code>GeneratedPlan</code> (<code>@Generable</code>, arrays of nested <code>@Generable</code>
+   structs). If the SDK rejects nested arrays, flatten <code>arguments</code> into a
+   single <code>"name=value; …"</code> string; the executor already falls back to the
+   deterministic planner when generation throws.</li>
+<li><strong><code>ToolOutput</code> / tool count (v0.2)</strong> — 22 tools are offered by default,
+   24 with integrations on. If the session's context or tool budget is
+   exceeded on device, the first remedy is trimming the tool list per
+   request.</li>
+<li><strong>Per-request tool trimming (v0.3)</strong> builds a new
+   <code>LanguageModelSession(tools:instructions:)</code> per request with the
+   <code>ToolSelector</code> subset, filtering <code>[any Tool]</code> by <code>name</code>. It compiles in
+   CI; whether the smaller schema improves tool choice or latency on device
+   is unmeasured (issue #6). It is off by default.</li>
+<li><strong>MLX backend</strong> is opt-in and untested by definition (needs the package
+   + <code>-D POCKETBRAINS_MLX</code>); the <code>mlx-swift-examples</code> generate API moves —
+   treat <code>MLXBackend.generate</code> as the adaptation point.</li>
+</ol>
+<h2 id="first-run-checklist-simulatordevice">First-run checklist (simulator/device)</h2>
+<p>Functional:
+- [ ] Seeded content appears; thread welcome shows; suggestions fire.
+- [ ] "Remind me to send the invoice Friday" → tool card → task visible in
+      Today with Friday chip (works even in fallback mode).
+- [ ] "What's blocking the website redesign?" → blocker named ("Build
+      homepage in Framer" waiting on copy + photography).
+- [ ] "Summarize my notes from yesterday" → notesFrom tool fires.
+- [ ] Completing a task in Today updates project progress ring.
+- [ ] Knowledge: tap node → refocus animation; tap focus → note opens;
+      pinch/pan; link created by agent appears as new edge.
+- [ ] Airplane Mode: everything above still works.</p>
+<p>v0.2 (simulator or device):
+- [ ] "Create a project Launch, add 3 tasks for Friday and link it to
+      brand voice" → plan card with 5 numbered steps, all ✓; the tasks are
+      in Launch; Undo on the plan card removes all of it.
+- [ ] "Undo that" after a single action reverts just that turn.
+- [ ] "What do my notes say about …?" → answer with <code>[1]</code> chips; tapping a
+      chip opens the note. Edit the note, ask again: the answer reflects
+      the edit.
+- [ ] Settings → Integrations: switching Calendar on shows the iOS prompt
+      once; "what's my afternoon look like?" lists real events. Denying
+      shows the inline hint and leaves the switch off.
+- [ ] "Export today's tasks to Reminders" → reminders appear in the
+      Reminders app; "undo that" removes exactly those.
+- [ ] Shortcuts app lists Ask PocketBrains, Add Task, What's Blocking,
+      Capture Note; "Hey Siri, what's blocking my project in PocketBrains"
+      asks for the project and answers.
+- [ ] Add the Today widget (small, medium, lock screen); complete a task in
+      the app and the widget updates. Needs the App Group capability on
+      both targets when signed.
+- [ ] Complete a recurring task in Today: the next occurrence appears.</p>
+<p>v0.3 (simulator or device):
+- [ ] Quick intents: "Can the invoice slip to Thursday?", "Paid the water
+      bill", "The gutters are clean", "Q3 planning progress?", "What's the
+      venue capacity?" each produce the expected card.
+- [ ] Settings, Intelligence shows "Focused tool list" (off by default).
+      On an Apple Intelligence device, turn it on and repeat the v0.2
+      checks above; note any request where the needed tool was not offered.
+- [ ] After the v0.3 merge: CI runs on the push to <code>main</code>, then the Pages
+      workflow publishes <code>gh-pages</code>, and https://seanmcrae.github.io/pocketbrains-app/
+      shows eval tables citing that CI run. If Pages does not serve the
+      branch the first time, enable Settings, Pages, "Deploy from a branch",
+      <code>gh-pages</code> / root, and push an empty commit to <code>gh-pages</code> titled
+      "Publish GitHub Pages".</p>
+<p>What CI measures and what it skips (v0.3):
+- Measured on every run: router accuracy on all eight splits, tool-trimming
+  recall@6 and @8, BM25 retrieval recall@1 and @3, answer-span hit rate,
+  citation faithfulness and span attribution on the 61-question fixture.
+- Attempted on every run, skipped so far: semantic and hybrid retrieval.
+  The CI step allows the NLEmbedding sentence asset, but the macOS runner's
+  simulator reports it unavailable, so the eval prints "skipped" rather
+  than a number. Run the RAG eval on a device or a simulator with the asset
+  to measure the hybrid path.
+- Never measured in CI: Foundation Models and MLX accuracy and latency.</p>
+<p>Design (record simulator captures, step frame-by-frame):
+- [ ] Horizon pull: thread recedes smoothly, no corner-radius pop at
+      dock/undock boundaries; interrupt mid-gesture both directions.
+- [ ] Condensation reveal: glyphs never flash at full opacity before
+      settling; landing glow subtle; 60fps during streaming.
+- [ ] Glass speculars track device tilt (hardware only); no shimmer strobe.
+- [ ] Tool cards slide from the orb without layout jump in the scroll.
+- [ ] Project card → dossier hero expansion holds the hue and radius
+      concentricity; no double-render flash of the matched pair.
+- [ ] TabView page swipe vs. constellation pan: if they fight, gate the
+      pan gesture to <code>scale &gt; 1.05</code> or swap TabView for a custom pager.</p>
+<p>Performance:
+- [ ] Many glass chips on screen (Today with 10+ tasks) holds 60fps on an
+      A17-class device; if not, drop <code>GlassSheen</code> timeline to 10Hz for
+      <code>depth &lt; 0.5</code> surfaces.</p>
+  </article>
+</div>
+
+</main>
+<footer class="wrap footer">
+  <p>PocketBrains 0.3.0 &middot; Sean McRae &middot; <a href="https://github.com/seanmcrae/pocketbrains-app">Source on GitHub</a>.
+  No license has been chosen yet; the code is published for review.
+  Every number on this site is parsed from a CI build log of the iOS test suite on the bundled
+  synthetic corpora (<a href="https://github.com/seanmcrae/pocketbrains-app/actions/runs/37745540170">run 37745540170</a>).</p>
+</footer>
+<script type="module">
+  // Diagrams render when the CDN is reachable; otherwise their source stays readable.
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+</script>
+</body>
+</html>

@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PocketBrains: product brief</title>
+<meta name="description" content="PocketBrains: a private chief of staff for tasks, projects and notes, run by an AI agent that lives entirely on the iPhone.">
+<link rel="canonical" href="https://seanmcrae.github.io/pocketbrains-app/">
+<style>:root{--ink:#1d2733;--muted:#56657a;--line:#dde3ea;--soft:#f4f6f9;--accent:#9a6a12;--link:#1f5fa8;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:4rem}
+body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:#fff}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:0 1.25rem}
+.topbar{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.95);border-bottom:1px solid var(--line)}
+.topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;height:3.25rem}
+.brand{font-weight:700;color:var(--ink);font-family:var(--mono)}
+nav{display:flex;flex-wrap:wrap;gap:1.1rem;font-size:.92rem}nav a{color:var(--muted)}
+.hero{background:linear-gradient(180deg,var(--soft),#fff);padding:3.5rem 0 1rem;border-bottom:1px solid var(--line)}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;color:var(--accent);font-weight:600;margin:0}
+.hero h1{font-size:clamp(1.7rem,3.4vw,2.5rem);line-height:1.2;margin:.5rem 0 1rem;max-width:22em}
+.lede{font-size:1.1rem;color:var(--muted);max-width:44em}
+.cta{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.5rem 0}
+.button{display:inline-block;padding:.5rem 1rem;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font-weight:500}
+.button.primary{background:var(--ink);border-color:var(--ink);color:#fff}.button:hover{text-decoration:none;border-color:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin:2rem 0}
+.stat{background:#fff;border:1px solid var(--line);border-radius:8px;padding:1rem 1.1rem}
+.stat-label{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.stat-value{font-size:1.6rem;font-weight:700;font-family:var(--mono);margin:.2rem 0;overflow-wrap:anywhere}
+.stat-detail{font-size:.88rem;color:var(--muted)}
+figure{margin:1.5rem 0}figure img{max-width:100%;height:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
+figcaption{font-size:.88rem;color:var(--muted);margin-top:.5rem}
+.diagram img{padding:.75rem}
+.prose{padding-top:2.5rem}
+.prose h2{font-size:1.6rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+.prose h3{font-size:1.15rem;margin-top:1.8rem}
+.prose li{margin:.25rem 0}
+.note{color:var(--muted);font-size:.92rem}
+code{font-family:var(--mono);font-size:.88em;background:var(--soft);padding:.1em .3em;border-radius:4px}
+pre{background:#1d2733;color:#e8edf3;padding:1rem;border-radius:8px;overflow-x:auto;font-size:.85rem;line-height:1.5}
+pre code{background:none;padding:0;color:inherit;font-size:inherit}
+.table-scroll{overflow-x:auto}
+table{border-collapse:collapse;margin:1rem 0;font-size:.88rem;width:100%}
+th,td{border-bottom:1px solid var(--line);padding:.45rem .6rem;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{background:var(--soft);font-weight:600}
+.prose table th,.prose table td{text-align:left;white-space:normal}
+#results th,#results td{text-align:right;white-space:nowrap}
+#results th:first-child,#results td:first-child{text-align:left}
+details{margin:.5rem 0 1rem}summary{cursor:pointer;color:var(--muted);font-size:.9rem}
+.with-toc{display:grid;grid-template-columns:220px 1fr;gap:2.5rem;padding-top:2rem}
+.toc{position:sticky;top:4.5rem;align-self:start;font-size:.9rem}
+.toc ul{list-style:none;padding:0;margin:0}.toc li{margin:.35rem 0}
+.toc-title{font-weight:600;margin-top:0}
+.with-toc .prose{padding-top:0}.with-toc h1{margin-top:0}
+.footer{border-top:1px solid var(--line);margin-top:3rem;padding:1.5rem 1.25rem;color:var(--muted);font-size:.88rem}
+@media (max-width:760px){.with-toc{grid-template-columns:1fr}.toc{position:static}nav{gap:.7rem}.topbar-inner{height:auto;padding:.5rem 1.25rem}}
+.hero-head{display:flex;align-items:center;gap:1rem}.hero-head img{width:56px;height:56px;border-radius:12px}
+.tag{display:inline-block;font-size:.75rem;padding:.05rem .45rem;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.honest{border-color:#2f7d4f;color:#2f7d4f}.tag.tuned{border-color:#9a6a12;color:#9a6a12}.tag.gated{border-color:var(--ink);color:var(--ink)}
+pre.mermaid{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.callout{border-left:3px solid var(--accent);background:var(--soft);padding:.75rem 1rem;border-radius:0 6px 6px 0}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="index.html">PocketBrains</a>
+    <nav>
+      <a href="index.html#evaluation">Evaluation</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="product.html">Product brief</a>
+      <a href="verification.html">Verification</a>
+      <a href="https://github.com/seanmcrae/pocketbrains-app">GitHub</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<div class="wrap with-toc">
+  <aside class="toc">
+    <p class="toc-title">Product brief</p>
+    <ul><li><a href="#v03-at-a-glance">v0.3 at a glance</a></li><li><a href="#v02-at-a-glance">v0.2 at a glance</a></li><li><a href="#problem">Problem</a></li><li><a href="#target-users">Target users</a></li><li><a href="#jobs-to-be-done">Jobs to be done</a></li><li><a href="#scope">Scope</a></li><li><a href="#requirements">Requirements</a></li><li><a href="#success-metrics-and-evals">Success metrics and evals</a></li><li><a href="#minimum-viable-quality">Minimum viable quality</a></li><li><a href="#cost-at-1x-and-10x-usage">Cost at 1x and 10x usage</a></li><li><a href="#local-versus-cloud-trade-offs">Local versus cloud: trade-offs</a></li><li><a href="#key-decisions">Key decisions</a></li><li><a href="#risks">Risks</a></li><li><a href="#roadmap">Roadmap</a></li></ul>
+  </aside>
+  <article class="prose">
+    <h1>Product brief</h1>
+    <p>Status: pre-release (v0.3 in review; v0.2.0 is the latest source
+release). Built and tested in CI on the iOS 26 simulator; not yet on the
+App Store and without users. Numbers in this document come from
+the repository's own eval and CI, and say so; targets are marked as
+targets.</p>
+<h2 id="v03-at-a-glance">v0.3 at a glance</h2>
+<p>v0.3 (pull request "PocketBrains v0.3: honest generalization, tool
+trimming, RAG eval, docs site") is a measurement release. It makes the
+generalization number trustworthy before improving it, prepares the
+Foundation Models brain for a smaller tool budget, and gives "ask your
+notes" an eval large enough to mean something.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What shipped</th>
+<th>Why it matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Honest generalization</td>
+<td>New 53-utterance held-out split frozen before any router change; 51-utterance dev split; v0.2 held-out frozen as "reported"; router constructions tuned on dev only</td>
+<td>The v0.2 held-out number had been published, so it could no longer be a clean test</td>
+</tr>
+<tr>
+<td>Tool trimming</td>
+<td>Deterministic <code>ToolSelector</code> (about 8 of 24 tools per request, core tools always in), behind a Settings switch, with recall@k in CI</td>
+<td>A ~3B model with 22 to 24 tool schemas is the largest known risk to on-device accuracy</td>
+</tr>
+<tr>
+<td>RAG eval</td>
+<td>61 synthetic questions over 22 notes: recall@1/@3, answer-span hit, citation faithfulness, span attribution</td>
+<td>12 questions could not separate a real change from noise</td>
+</tr>
+<tr>
+<td>Docs site</td>
+<td>GitHub Pages site generated from CI logs</td>
+<td>One place to read the evidence, with no hand-typed numbers</td>
+</tr>
+</tbody>
+</table>
+<h3 id="v03-metrics-from-ci-deterministic-brain-and-trimmer-only">v0.3 metrics (from CI, deterministic brain and trimmer only)</h3>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Before</th>
+<th>v0.3</th>
+<th>Source (GitHub Actions run)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tests</td>
+<td>112 in 15 suites</td>
+<td>129 in 18 suites</td>
+<td>37721075662, 37723402205</td>
+</tr>
+<tr>
+<td>v0.3 held-out paraphrases (53), end-to-end, never tuned on</td>
+<td>30.2%</td>
+<td>39.6%</td>
+<td>37721075662, 37723402205</td>
+</tr>
+<tr>
+<td>v0.2 held-out paraphrases (34), end-to-end, frozen</td>
+<td>35.3%</td>
+<td>47.1%</td>
+<td>same</td>
+</tr>
+<tr>
+<td>v0.3 dev paraphrases (51), end-to-end, tuned on</td>
+<td>5.9%</td>
+<td>100%</td>
+<td>same</td>
+</tr>
+<tr>
+<td>Canonical + compound (71), end-to-end</td>
+<td>100% (gated)</td>
+<td>100% (gated)</td>
+<td>same</td>
+</tr>
+<tr>
+<td>Tool-trimming recall@8, all 243 cases / v0.3 held-out</td>
+<td>n/a</td>
+<td>96.3% / 90.6%</td>
+<td>37723402205</td>
+</tr>
+<tr>
+<td>Tool-trimming recall@6, all 243 cases / v0.3 held-out</td>
+<td>n/a</td>
+<td>94.7% / 86.8%</td>
+<td>37723402205</td>
+</tr>
+<tr>
+<td>Ask-your-notes BM25 recall@1 / recall@3, 61 questions</td>
+<td>n/a</td>
+<td>93.4% / 96.7%</td>
+<td>37723402205</td>
+</tr>
+<tr>
+<td>Citation faithfulness (extractive answers, 130 markers)</td>
+<td>n/a</td>
+<td>100%</td>
+<td>37723402205</td>
+</tr>
+<tr>
+<td>Semantic / hybrid retrieval</td>
+<td>n/a</td>
+<td>skipped: no embedding asset on the CI runner</td>
+<td>37723402205</td>
+</tr>
+</tbody>
+</table>
+<p>"Before" is the v0.3 branch with the new splits committed and the router
+unchanged. Not measured: anything about Foundation Models or MLX, and
+whether trimming helps the model; those need a device (roadmap).</p>
+<h3 id="v03-trade-offs">v0.3 trade-offs</h3>
+<ul>
+<li><strong>A lower headline number on purpose.</strong> The new held-out split scored
+  30.2% before any work, below v0.2's 35.3% on its own held-out split.
+  Reporting the new split as the headline makes the product look weaker
+  this release and is the only way the next number means anything.</li>
+<li><strong>Constructions, not sentences.</strong> The router gained frames for general
+  constructions ("X is done", "can X slip to Y", "Idea: …") rather than
+  rules for each dev miss. Dev reached 100%; the held-out split moved 9.4
+  points. The remaining 32 held-out misses are left to the model tiers
+  rather than chased with rules that would only fit this corpus.</li>
+<li><strong>Trimming ships off.</strong> Recall@8 is 96.3%, so roughly 1 corpus case in 27
+  would be offered a set without the right tool, and the trimmed session
+  drops multi-turn context. Without on-device evidence that the smaller
+  schema helps the model, the safer default is the full catalog.</li>
+<li><strong>"Push the invoice to Monday" is a reschedule.</strong> The v0.1 expectation
+  (<code>updateTask</code>) predates <code>rescheduleTask</code>; the expectation was corrected
+  and the reason recorded, rather than keeping a known-wrong test or
+  bending the router to it.</li>
+</ul>
+<h2 id="v02-at-a-glance">v0.2 at a glance</h2>
+<p>v0.2 (pull request "PocketBrains v2: multi-step agent, cited note Q&amp;A,
+system integrations, smarter tools") moves the agent from "one sentence,
+one tool call" to "one request, a checked plan", and makes every action
+reversible.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What shipped</th>
+<th>Job it serves</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Multi-step agent</td>
+<td>Planner (deterministic, plus Foundation Models guided generation), step executor with id passing and postconditions, plan card</td>
+<td>Capture without filing: one sentence sets up a project</td>
+</tr>
+<tr>
+<td>Undo</td>
+<td>Action journal with inverses, atomic per plan; Undo on cards and "undo that"</td>
+<td>Trust it</td>
+</tr>
+<tr>
+<td>Ask your notes</td>
+<td>Passage index (BM25 plus on-device embeddings), cited answers</td>
+<td>Find what I already know</td>
+</tr>
+<tr>
+<td>Integrations (opt-in)</td>
+<td>Calendar read for briefs and "what's my afternoon look like", Reminders export, App Intents, Today widget</td>
+<td>Start the day oriented; reach without opening the app</td>
+</tr>
+<tr>
+<td>Tools and router</td>
+<td>24 tools (recurrence, reschedule, snooze, priority, milestones, append, search everything); lexicon, lemma and slot-frame router; richer dates</td>
+<td>Capture without filing; know where things stand</td>
+</tr>
+</tbody>
+</table>
+<h3 id="v02-metrics-from-ci-deterministic-brain-only">v0.2 metrics (from CI, deterministic brain only)</h3>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>v0.1</th>
+<th>v0.2</th>
+<th>Source (GitHub Actions run)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tests</td>
+<td>55 in 10 suites</td>
+<td>112 in 15 suites</td>
+<td>37644353241, 37652691087</td>
+</tr>
+<tr>
+<td>Original 40 utterances, end-to-end</td>
+<td>77.5%</td>
+<td>97.5%</td>
+<td>same</td>
+</tr>
+<tr>
+<td>Canonical + compound phrasing (71), end-to-end</td>
+<td>n/a</td>
+<td>100% (gated)</td>
+<td>37652691087</td>
+</tr>
+<tr>
+<td>Held-out paraphrases (34), end-to-end</td>
+<td>n/a</td>
+<td>35.3% (11.8% before the router upgrade)</td>
+<td>37650929852, 37652691087</td>
+</tr>
+<tr>
+<td>Ask-your-notes recall@3, BM25 path, 12 questions</td>
+<td>n/a</td>
+<td>91.7%</td>
+<td>37652691087</td>
+</tr>
+<tr>
+<td>Routing + execution latency p95, CI simulator</td>
+<td>7.3 ms</td>
+<td>25.7 ms</td>
+<td>37644353241, 37652691087</td>
+</tr>
+</tbody>
+</table>
+<p>Not measured: anything about Foundation Models or MLX (planning accuracy,
+grounded-answer faithfulness, latency). Those need hardware and are the
+first roadmap item.</p>
+<h3 id="v02-trade-offs">v0.2 trade-offs</h3>
+<ul>
+<li><strong>Opt-in system data (EventKit) versus the privacy story.</strong> Calendar
+  read and Reminders write are the first time PocketBrains touches data it
+  did not create. Both are off by default, explained on a dedicated screen
+  before the iOS prompt, and requested as separate permissions. The app
+  still makes no network calls. But if the user's calendars or reminder
+  lists sync through iCloud (or accounts such as Google or Exchange added
+  to iOS), reminders that PocketBrains exports leave the device through the
+  <em>system's</em> sync, under the user's account settings, and calendar events
+  it reads may have come from those services. The Integrations screen says
+  so. Calendar data is read per request and never stored in PocketBrains'
+  database; only the identifiers of exported reminders are kept, so an
+  export can be undone.</li>
+<li><strong>Full-access calendar permission.</strong> iOS 17+ offers write-only calendar
+  access, but reading agenda context requires full access. PocketBrains
+  asks for the least that delivers the feature and never writes events.</li>
+<li><strong>Undo instead of confirmation.</strong> The agent acts first and makes every
+  action reversible, rather than asking "are you sure?" on each step. That
+  keeps capture fast; the journal is the safety net. There are still no
+  delete tools.</li>
+<li><strong>Plans stop on first failure and keep completed steps.</strong> Completed
+  steps stay applied (and are undoable as a group) rather than rolling
+  back automatically; a step that ran but failed its postcondition is
+  reverted before stopping. Auto-rollback would hide partial progress the
+  user may want.</li>
+<li><strong>Tool count versus a ~3B model.</strong> 22 to 24 tools is a lot of schema for
+  a small context window; integration tools are offered only after
+  opt-in. (v0.3 added per-request trimming behind a switch.)</li>
+<li><strong>Widget reads a snapshot, not the database.</strong> Moving the SwiftData
+  store into the App Group would be a data migration with real risk; a
+  small JSON snapshot written after each task change is enough for a
+  glanceable widget.</li>
+<li><strong>Held-out honesty over a higher number.</strong> The deterministic router was
+  tuned on dev paraphrases only; the held-out split shows what that buys
+  off-grammar (35.3%), and the rest is the model tiers' job.</li>
+</ul>
+<h2 id="problem">Problem</h2>
+<p>People who run their own work (independent consultants, founders, product
+and project leads, students with heavy course loads) keep their tasks,
+project status and notes in three or four apps. Capturing is easy;
+connecting is not. "What's blocking the website?" means opening the task
+app, finding the project, reading dependencies, then searching notes for
+context. The cloud assistants that can answer that question in one
+sentence need the user's entire work life on someone else's servers, which
+many of these users either cannot accept (client confidentiality, NDAs,
+regulated work) or do not want.</p>
+<p>On-device language models in iOS 26 change what is possible: a capable
+model that runs locally, with native tool calling. The gap is a product
+that uses it to act on real structured data, works when the model is not
+available, and makes the privacy guarantee verifiable instead of a
+marketing line.</p>
+<h2 id="target-users">Target users</h2>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Situation</th>
+<th>Why on-device matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Independent professionals</td>
+<td>Several clients, each with tasks and notes, often under NDA</td>
+<td>Client data cannot go to a third-party AI service</td>
+</tr>
+<tr>
+<td>Product and project leads</td>
+<td>Many workstreams, dependencies, weekly status</td>
+<td>Fast "what's blocked" answers without a team tool</td>
+</tr>
+<tr>
+<td>Privacy-first individuals</td>
+<td>Already avoid cloud note apps</td>
+<td>Want AI help without the trade</td>
+</tr>
+</tbody>
+</table>
+<p>Primary persona for v1: an independent professional on a recent iPhone who
+captures on the move and plans at a desk, and who will not upload client
+material to a chatbot.</p>
+<h2 id="jobs-to-be-done">Jobs to be done</h2>
+<ol>
+<li><strong>Capture without filing.</strong> "Remind me to send the invoice Friday"
+   becomes a dated task in the right project, from one sentence.</li>
+<li><strong>Know where things stand.</strong> "What's blocking the website redesign?"
+   returns blockers, what they wait on, and the next milestone.</li>
+<li><strong>Start the day oriented.</strong> A morning brief and an agenda of overdue,
+   due, blocked and this week's work.</li>
+<li><strong>Find what I already know.</strong> Semantic and keyword search across notes;
+   "summarize my notes from yesterday".</li>
+<li><strong>Connect ideas to work.</strong> Link a note to a project; new notes are
+   linked automatically to the projects and tasks they mention.</li>
+<li><strong>Trust it.</strong> Know, and be able to check, that nothing leaves the phone.</li>
+</ol>
+<h2 id="scope">Scope</h2>
+<p><strong>In (built on <code>main</code>)</strong></p>
+<ul>
+<li>One conversational thread over a local SwiftData store, with a 24-tool
+  agent (v0.1 shipped 13; v0.2 added planning, undo, cited note Q&amp;A,
+  recurrence, scheduling and opt-in integrations).</li>
+<li>Three-tier brain: Apple Foundation Models, optional MLX Qwen3 build, and
+  a deterministic intent router that always works.</li>
+<li>Spaces: Today, Projects and a Knowledge constellation, sharing one write
+  path with the agent.</li>
+<li>Morning brief and evening reflection, due-date notifications, Siri and
+  Shortcuts intents for capture, full JSON export.</li>
+<li>Deep Glass design system with Metal shaders and Reduce Motion support.</li>
+<li>Privacy manifest declaring no tracking and no collected data.</li>
+</ul>
+<p><strong>Out (deliberately)</strong></p>
+<ul>
+<li>Accounts, sync, collaboration and any server component.</li>
+<li>Cloud model fallback. If no on-device model is usable, the deterministic
+  router answers; the app never sends a prompt off the device.</li>
+<li>Email ingestion. (Calendar read shipped in v0.2 as an explicit opt-in;
+  see "v0.2 trade-offs".)</li>
+<li>Non-English input for the deterministic router.</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Every agent action goes through a tool and is shown as a card; the model
+  may not claim an action it did not perform (<code>AgentVoice</code> instructions).</li>
+<li>One write path (<code>DataServices</code>) for agent, views and intents.</li>
+<li>A turn never dead-ends: model failure falls back to the deterministic
+  router; a failed turn offers retry.</li>
+<li>Works in Airplane Mode with full functionality of the active brain.</li>
+<li>Store failures never silently drop data: the broken store is backed up
+  before falling back.</li>
+</ul>
+<h2 id="success-metrics-and-evals">Success metrics and evals</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>How it is measured</th>
+<th>Current</th>
+<th>Target for v1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tool-selection accuracy, deterministic router, canonical phrasing</td>
+<td><code>Tests/Eval</code> on the bundled synthetic corpus, every CI run</td>
+<td>See README "Evaluation"</td>
+<td>100% on canonical phrasing</td>
+</tr>
+<tr>
+<td>End-to-end accuracy (right tool, succeeded, right arguments)</td>
+<td>Same eval</td>
+<td>See README</td>
+<td>100% canonical</td>
+</tr>
+<tr>
+<td>Paraphrase accuracy of the deterministic router</td>
+<td>Same eval: dev splits (tuned on) and two frozen held-out splits (never tuned on)</td>
+<td>See README</td>
+<td>Tracked, not gated: paraphrase is the language model's job; the v0.3 held-out split is the headline</td>
+</tr>
+<tr>
+<td>Tool-trimming recall@k</td>
+<td>Share of corpus cases whose expected tool is in the <code>ToolSelector</code> set, every CI run</td>
+<td>See README</td>
+<td>95% or more at k = 8 on held-out before the switch defaults on</td>
+</tr>
+<tr>
+<td>"Ask your notes" retrieval and citations</td>
+<td><code>RAGEval</code>: 61 synthetic questions; recall@1/@3, answer-span hit, citation faithfulness</td>
+<td>See README</td>
+<td>Faithfulness 100% (gated by test); recall@3 at or above 90% (gated)</td>
+</tr>
+<tr>
+<td>Tool-call accuracy, Foundation Models brain</td>
+<td>Same corpus run on an Apple Intelligence device</td>
+<td>Not measured yet (needs hardware)</td>
+<td>Target 90% end-to-end on the combined corpus</td>
+</tr>
+<tr>
+<td>Routing plus tool execution latency, deterministic</td>
+<td>Eval timing on the CI simulator, in-memory store</td>
+<td>See README</td>
+<td>Under 50 ms p95</td>
+</tr>
+<tr>
+<td>Time to first token, Foundation Models</td>
+<td>Instrumented on device</td>
+<td>Not measured yet</td>
+<td>Target under 1 s on an iPhone 16 Pro class device</td>
+</tr>
+<tr>
+<td>Network requests made by the app</td>
+<td>Code has no networking APIs; to be verified with a proxy and Airplane Mode on device</td>
+<td>Zero by construction</td>
+<td>Zero, verified per release</td>
+</tr>
+<tr>
+<td>Data collected</td>
+<td>Privacy manifest and App Store label</td>
+<td>None declared</td>
+<td>None</td>
+</tr>
+</tbody>
+</table>
+<p>The accuracy floor in CI is set just below the measured canonical score so
+a routing regression fails the build. Paraphrase results are reported but
+not gated, because improving them with more rules would overfit the
+corpus; that is what the language-model tiers are for.</p>
+<h2 id="minimum-viable-quality">Minimum viable quality</h2>
+<p>Thresholds for a first TestFlight build, using the metrics above and
+consistent with the v1 targets. "Current" is CI run 37723402205,
+deterministic brain only. Foundation Models rows cannot be scored until
+issue #5 lands, so no v1 build ships before they are.</p>
+<table>
+<thead>
+<tr>
+<th>Gate</th>
+<th>Do not ship</th>
+<th>Ship</th>
+<th>Delight</th>
+<th>Current</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Canonical + compound phrasing, end-to-end (71)</td>
+<td>below 100% (CI gate)</td>
+<td>100%</td>
+<td>100%</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Held-out paraphrases, end-to-end, best available brain</td>
+<td>below 60%</td>
+<td>75% or more</td>
+<td>90% or more (the Foundation Models v1 target)</td>
+<td>39.6% deterministic floor only; model tiers unmeasured (#5)</td>
+</tr>
+<tr>
+<td>Held-out paraphrases, end-to-end, deterministic floor</td>
+<td>below 30.2% (the pre-v0.3 baseline)</td>
+<td>39.6% or more (no regression)</td>
+<td>50% or more</td>
+<td>39.6%</td>
+</tr>
+<tr>
+<td>Tool trimming recall@8, held-out (before the switch defaults on)</td>
+<td>below 90%</td>
+<td>95% or more</td>
+<td>98% or more</td>
+<td>90.6% (switch stays off)</td>
+</tr>
+<tr>
+<td>Ask-your-notes recall@3 (61 questions)</td>
+<td>below 90% (CI gate)</td>
+<td>90% or more</td>
+<td>97% or more</td>
+<td>96.7% (BM25)</td>
+</tr>
+<tr>
+<td>Citation faithfulness, extractive answers</td>
+<td>below 100% (CI gate)</td>
+<td>100%</td>
+<td>100%</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Citation faithfulness, model-written answers</td>
+<td>any unsupported citation in the hand-labelled set</td>
+<td>95% or more</td>
+<td>100%</td>
+<td>not measured (#7)</td>
+</tr>
+<tr>
+<td>Routing + execution latency p95, CI simulator</td>
+<td>50 ms or more</td>
+<td>under 50 ms</td>
+<td>under 20 ms</td>
+<td>21.74 ms (47.13 ms on main run 37727772426; #15)</td>
+</tr>
+<tr>
+<td>Time to first token, Foundation Models</td>
+<td>over 2 s</td>
+<td>under 1 s</td>
+<td>under 0.5 s</td>
+<td>not measured (#5)</td>
+</tr>
+<tr>
+<td>Network requests made by the app</td>
+<td>any</td>
+<td>zero</td>
+<td>zero, verified with a proxy each release</td>
+<td>zero by construction</td>
+</tr>
+</tbody>
+</table>
+<p>The "Do not ship" line for the held-out split protects the measure: it
+fails only if a change makes the floor worse than before v0.3, not if
+the number stops rising. "Ship" on the best available brain is the gap
+the model tiers have to close.</p>
+<h2 id="cost-at-1x-and-10x-usage">Cost at 1x and 10x usage</h2>
+<p>Estimates. They use only this repository's own assumptions: inference
+runs on the user's device, there is no backend, no account system and no
+per-request API (see "Local versus cloud"), CI runs on GitHub-hosted
+runners, and App Store distribution needs an Apple Developer Program
+membership ($99 a year, <code>docs/LAUNCH.md</code>). "1x" is a first TestFlight
+cohort; "10x" is ten times the users and requests. The repository makes
+no assumption about absolute user counts, so none is invented here.</p>
+<table>
+<thead>
+<tr>
+<th>Cost line</th>
+<th>1x</th>
+<th>10x</th>
+<th>Scales with usage?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Inference (per request)</td>
+<td>$0: on device</td>
+<td>$0: on device</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Backend, storage, bandwidth</td>
+<td>$0: none exists</td>
+<td>$0</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Apple Developer Program</td>
+<td>$99 a year</td>
+<td>$99 a year</td>
+<td>No</td>
+</tr>
+<tr>
+<td>CI</td>
+<td>GitHub-hosted runners for the public repository</td>
+<td>same</td>
+<td>No: scales with commits, not users</td>
+</tr>
+<tr>
+<td>Per-user device cost</td>
+<td>battery and thermals per request (unmeasured); opt-in MLX build adds a ~2.3 GB one-time model download</td>
+<td>same per user</td>
+<td>Per user, borne by the user's device</td>
+</tr>
+</tbody>
+</table>
+<p>The cost a cloud assistant would scale with engagement (tokens per
+request times requests) is zero here at any usage level. What grows
+with usage is support and App Store review work, which the repository
+does not estimate, and the on-device cost each user carries, which
+issue #5's device runs should measure (time to first token, and ideally
+energy per request).</p>
+<h2 id="local-versus-cloud-trade-offs">Local versus cloud: trade-offs</h2>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>On-device (chosen)</th>
+<th>Cloud LLM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Privacy</td>
+<td>Data never leaves the phone; easy to explain and verify</td>
+<td>Requires trust in a provider and its retention policy</td>
+</tr>
+<tr>
+<td>Capability</td>
+<td>~3B model: good at tool selection and short replies, weaker at long reasoning</td>
+<td>Much stronger reasoning and long context</td>
+</tr>
+<tr>
+<td>Availability</td>
+<td>Apple Intelligence devices only; mitigated by MLX tier and deterministic floor</td>
+<td>Any device with a connection</td>
+</tr>
+<tr>
+<td>Latency</td>
+<td>No network round trip; model load and device thermals matter</td>
+<td>Network-bound, variable</td>
+</tr>
+<tr>
+<td>Cost</td>
+<td>No per-request cost; no backend to run</td>
+<td>Per-token cost that scales with engagement</td>
+</tr>
+<tr>
+<td>Offline</td>
+<td>Full function</td>
+<td>None</td>
+</tr>
+</tbody>
+</table>
+<p>The decision follows from the target user: for someone under NDA, a
+stronger cloud model they cannot use has no value. The capability gap is
+narrowed by keeping the model's job small (pick a tool, fill arguments,
+phrase a short reply) while deterministic code does the data work.</p>
+<h2 id="key-decisions">Key decisions</h2>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Why</th>
+<th>Alternative considered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tools as the only way to act</td>
+<td>Prevents claimed-but-not-done actions; every action is visible as a card</td>
+<td>Free-form generation with post-hoc parsing</td>
+</tr>
+<tr>
+<td>Backend-neutral <code>ToolBox</code> with thin adapters</td>
+<td>One implementation, three brains, one test surface</td>
+<td>Per-backend tool code</td>
+</tr>
+<tr>
+<td>Deterministic floor instead of "AI unavailable"</td>
+<td>The product must work on every device and in the simulator</td>
+<td>Gate the app on Apple Intelligence</td>
+</tr>
+<tr>
+<td>Brain swap on generation failure</td>
+<td>Availability checks can pass while generation fails</td>
+<td>Surface an error</td>
+</tr>
+<tr>
+<td>No cloud fallback at all</td>
+<td>Keeps the privacy promise absolute and simple</td>
+<td>Opt-in cloud for hard queries</td>
+</tr>
+<tr>
+<td>SwiftData with conservative attribute types</td>
+<td>Several richer shapes trapped on the iOS 26 runtime in CI</td>
+<td>Core Data or a third-party store</td>
+</tr>
+<tr>
+<td>Single conversational surface plus spaces</td>
+<td>Talk to act, look to understand</td>
+<td>Tabbed task, project and note apps</td>
+</tr>
+</tbody>
+</table>
+<h2 id="risks">Risks</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Foundation Models API changes between iOS 26 point releases</td>
+<td>API hedges listed in <code>docs/VERIFICATION.md</code>; adapter is one file</td>
+</tr>
+<tr>
+<td>Trimming hides the tool a request needs</td>
+<td>Core tools always offered; recall@k tracked in CI; the switch is off by default until measured on device</td>
+</tr>
+<tr>
+<td>Small model picks the wrong tool or misparses a date</td>
+<td>Dates are re-parsed by <code>NaturalDateParser</code>; tool cards make actions visible and undoable from the spaces</td>
+</tr>
+<tr>
+<td>Prompt injection through note content triggers a destructive tool</td>
+<td>No delete tools are exposed to the agent; every agent mutation is journaled and undoable</td>
+</tr>
+<tr>
+<td>A planned request does the wrong thing in several places at once</td>
+<td>The plan card shows every step; postconditions stop the plan; one Undo reverts the whole plan atomically</td>
+</tr>
+<tr>
+<td>Exported reminders leave the device through the user's iCloud sync</td>
+<td>Off by default; stated on the Integrations screen before the iOS prompt</td>
+</tr>
+<tr>
+<td>Deterministic router feels rigid</td>
+<td>In-app guidance teaches the grammar; the model tiers handle paraphrase</td>
+</tr>
+<tr>
+<td>SwiftData migration failures</td>
+<td>Backup-then-fallback path in <code>Store</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="roadmap">Roadmap</h2>
+<p><strong>Now</strong></p>
+<ul>
+<li>Run the 243-utterance corpus (including both held-out splits and the
+  compound requests) against the Foundation Models brain on device;
+  publish tool and plan accuracy, and time to first token (issue #5).</li>
+<li>Validate tool trimming on device, trimming on versus off, then choose
+  its default (issue #6).</li>
+<li>Measure cited-answer faithfulness of model-written answers on a small
+  hand-labelled set (issue #7).</li>
+<li>Fix the O(n²) blocker lookup flagged in <code>docs/QA_REPORT.md</code> (issue #10).</li>
+</ul>
+<p><strong>Next</strong></p>
+<ul>
+<li>Dynamic Type mapping and a full VoiceOver pass (issue #8).</li>
+<li>Localization of UI strings; multilingual routing via the model tiers.</li>
+<li>Interactive widget (complete a task from the widget through App Intents, issue #9).</li>
+</ul>
+<p><strong>Later</strong></p>
+<ul>
+<li>iCloud private-database sync as an explicit opt-in, with the trade-off
+  stated in the privacy story.</li>
+<li>TestFlight and App Store release, subject to the licensing and naming
+  decisions recorded in the pull request that introduced this document.</li>
+</ul>
+  </article>
+</div>
+
+</main>
+<footer class="wrap footer">
+  <p>PocketBrains 0.3.0 &middot; Sean McRae &middot; <a href="https://github.com/seanmcrae/pocketbrains-app">Source on GitHub</a>.
+  No license has been chosen yet; the code is published for review.
+  Every number on this site is parsed from a CI build log of the iOS test suite on the bundled
+  synthetic corpora (<a href="https://github.com/seanmcrae/pocketbrains-app/actions/runs/37745540170">run 37745540170</a>).</p>
+</footer>
+<script type="module">
+  // Diagrams render when the CDN is reachable; otherwise their source stays readable.
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+</script>
+</body>
+</html>

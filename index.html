@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PocketBrains: an on-device AI chief of staff for iOS</title>
+<meta name="description" content="PocketBrains: a private chief of staff for tasks, projects and notes, run by an AI agent that lives entirely on the iPhone.">
+<link rel="canonical" href="https://seanmcrae.github.io/pocketbrains-app/">
+<style>:root{--ink:#1d2733;--muted:#56657a;--line:#dde3ea;--soft:#f4f6f9;--accent:#9a6a12;--link:#1f5fa8;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:4rem}
+body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:#fff}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:0 1.25rem}
+.topbar{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.95);border-bottom:1px solid var(--line)}
+.topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;height:3.25rem}
+.brand{font-weight:700;color:var(--ink);font-family:var(--mono)}
+nav{display:flex;flex-wrap:wrap;gap:1.1rem;font-size:.92rem}nav a{color:var(--muted)}
+.hero{background:linear-gradient(180deg,var(--soft),#fff);padding:3.5rem 0 1rem;border-bottom:1px solid var(--line)}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;color:var(--accent);font-weight:600;margin:0}
+.hero h1{font-size:clamp(1.7rem,3.4vw,2.5rem);line-height:1.2;margin:.5rem 0 1rem;max-width:22em}
+.lede{font-size:1.1rem;color:var(--muted);max-width:44em}
+.cta{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.5rem 0}
+.button{display:inline-block;padding:.5rem 1rem;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font-weight:500}
+.button.primary{background:var(--ink);border-color:var(--ink);color:#fff}.button:hover{text-decoration:none;border-color:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin:2rem 0}
+.stat{background:#fff;border:1px solid var(--line);border-radius:8px;padding:1rem 1.1rem}
+.stat-label{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.stat-value{font-size:1.6rem;font-weight:700;font-family:var(--mono);margin:.2rem 0;overflow-wrap:anywhere}
+.stat-detail{font-size:.88rem;color:var(--muted)}
+figure{margin:1.5rem 0}figure img{max-width:100%;height:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
+figcaption{font-size:.88rem;color:var(--muted);margin-top:.5rem}
+.diagram img{padding:.75rem}
+.prose{padding-top:2.5rem}
+.prose h2{font-size:1.6rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+.prose h3{font-size:1.15rem;margin-top:1.8rem}
+.prose li{margin:.25rem 0}
+.note{color:var(--muted);font-size:.92rem}
+code{font-family:var(--mono);font-size:.88em;background:var(--soft);padding:.1em .3em;border-radius:4px}
+pre{background:#1d2733;color:#e8edf3;padding:1rem;border-radius:8px;overflow-x:auto;font-size:.85rem;line-height:1.5}
+pre code{background:none;padding:0;color:inherit;font-size:inherit}
+.table-scroll{overflow-x:auto}
+table{border-collapse:collapse;margin:1rem 0;font-size:.88rem;width:100%}
+th,td{border-bottom:1px solid var(--line);padding:.45rem .6rem;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{background:var(--soft);font-weight:600}
+.prose table th,.prose table td{text-align:left;white-space:normal}
+#results th,#results td{text-align:right;white-space:nowrap}
+#results th:first-child,#results td:first-child{text-align:left}
+details{margin:.5rem 0 1rem}summary{cursor:pointer;color:var(--muted);font-size:.9rem}
+.with-toc{display:grid;grid-template-columns:220px 1fr;gap:2.5rem;padding-top:2rem}
+.toc{position:sticky;top:4.5rem;align-self:start;font-size:.9rem}
+.toc ul{list-style:none;padding:0;margin:0}.toc li{margin:.35rem 0}
+.toc-title{font-weight:600;margin-top:0}
+.with-toc .prose{padding-top:0}.with-toc h1{margin-top:0}
+.footer{border-top:1px solid var(--line);margin-top:3rem;padding:1.5rem 1.25rem;color:var(--muted);font-size:.88rem}
+@media (max-width:760px){.with-toc{grid-template-columns:1fr}.toc{position:static}nav{gap:.7rem}.topbar-inner{height:auto;padding:.5rem 1.25rem}}
+.hero-head{display:flex;align-items:center;gap:1rem}.hero-head img{width:56px;height:56px;border-radius:12px}
+.tag{display:inline-block;font-size:.75rem;padding:.05rem .45rem;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.honest{border-color:#2f7d4f;color:#2f7d4f}.tag.tuned{border-color:#9a6a12;color:#9a6a12}.tag.gated{border-color:var(--ink);color:var(--ink)}
+pre.mermaid{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.callout{border-left:3px solid var(--accent);background:var(--soft);padding:.75rem 1rem;border-radius:0 6px 6px 0}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="index.html">PocketBrains</a>
+    <nav>
+      <a href="index.html#evaluation">Evaluation</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="product.html">Product brief</a>
+      <a href="verification.html">Verification</a>
+      <a href="https://github.com/seanmcrae/pocketbrains-app">GitHub</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-head">
+      <img src="img/icon-256.png" alt="PocketBrains app icon">
+      <p class="eyebrow">On-device AI agent for iOS 26</p>
+    </div>
+    <h1>A private chief of staff for your tasks, projects and notes. Nothing leaves the phone.</h1>
+    <p class="lede">One thread, a 24-tool agent that plans multi-step requests, answers from your
+    notes with citations, and can undo anything it did. Apple's on-device model when available,
+    an optional open model, and a deterministic router that always works.</p>
+    <p class="cta">
+      <a class="button primary" href="#evaluation">Evaluation</a>
+      <a class="button" href="architecture.html">Architecture</a>
+      <a class="button" href="https://github.com/seanmcrae/pocketbrains-app">View on GitHub</a>
+    </p>
+    
+    <div class="stats">
+      
+      <div class="stat">
+        <div class="stat-label">Tests passing</div>
+        <div class="stat-value">129</div>
+        <div class="stat-detail">Swift Testing, 129 tests in 18 suites, CI simulator</div>
+      </div>
+      
+      <div class="stat">
+        <div class="stat-label">Held-out paraphrases, end-to-end</div>
+        <div class="stat-value">39.6%</div>
+        <div class="stat-detail">53 utterances never used for tuning (deterministic brain)</div>
+      </div>
+      
+      <div class="stat">
+        <div class="stat-label">Tool trimming recall@8</div>
+        <div class="stat-value">96.3%</div>
+        <div class="stat-detail">expected tool kept when offering 8 of 24 tools, 243 cases</div>
+      </div>
+      
+      <div class="stat">
+        <div class="stat-label">Notes retrieval recall@3</div>
+        <div class="stat-value">96.7%</div>
+        <div class="stat-detail">BM25, 61 synthetic questions</div>
+      </div>
+      
+    </div>
+    
+  </div>
+</section>
+
+<section id="evaluation" class="wrap prose">
+  <h2>Evaluation</h2>
+  
+  <p class="note">Parsed from the <code>EVALJSON</code> lines of the iOS test job in
+  <a href="https://github.com/seanmcrae/pocketbrains-app/actions/runs/37745540170">CI run 37745540170</a>, with
+  the "before" column from <a href="https://github.com/seanmcrae/pocketbrains-app/actions/runs/37721075662">run 37721075662</a>
+  (the v0.3 branch before any router change). All corpora are synthetic and written for
+  the eval. Nothing below is typed by hand. These numbers describe the deterministic brain and the
+  tool trimmer only; no Foundation Models or MLX accuracy is claimed.</p>
+  <p><span class="tag honest">held-out</span> never used to tune rules, misses never itemized &middot;
+  <span class="tag tuned">dev</span> rules may be tuned on it &middot;
+  <span class="tag gated">gated</span> must stay at 100% or CI fails.</p>
+  
+  <h3 id="router">Deterministic router</h3>
+  <p>Every utterance runs through the deterministic brain's real entry point against a freshly seeded in-memory store. Tool accuracy: the right tool (for compound requests, the exact sequence). End-to-end: right tool, every call succeeded, and the resulting state is right. The v0.3 held-out row is the honest generalization number.</p>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Split</th><th>Role</th><th>n</th><th>Tool (before)</th><th>End-to-end (before)</th><th>Tool accuracy</th><th>End-to-end</th></tr></thead>
+    <tbody><tr><td>v1 canonical</td><td><span class="tag gated">gated</span> documented phrasing (v0.1)</td><td>29</td><td>100.0%</td><td>100.0%</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v1 paraphrase</td><td><span class="tag tuned">dev</span> seen during v0.2 tuning</td><td>11</td><td>100.0%</td><td>100.0%</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v2 canonical</td><td><span class="tag gated">gated</span> documented phrasing (v0.2 tools)</td><td>30</td><td>100.0%</td><td>100.0%</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v2 compound</td><td><span class="tag gated">gated</span> multi-step requests</td><td>12</td><td>100.0%</td><td>100.0%</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v2 dev paraphrase</td><td><span class="tag tuned">dev</span> v0.2 dev split</td><td>23</td><td>100.0%</td><td>100.0%</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v0.2 held-out (reported)</td><td><span class="tag honest">held-out</span> frozen; score published with v0.2</td><td>34</td><td>38.2%</td><td>35.3%</td><td>50.0%</td><td><strong>47.1%</strong></td></tr><tr><td>v0.3 dev paraphrase</td><td><span class="tag tuned">dev</span> v0.3 dev split, the only one v0.3 tuned on</td><td>51</td><td>5.9%</td><td>5.9%</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v0.3 held-out (frozen)</td><td><span class="tag honest">held-out</span> frozen before v0.3 router work; never tuned</td><td>53</td><td>37.7%</td><td>30.2%</td><td>47.2%</td><td><strong>39.6%</strong></td></tr><tr><td>original 40 (v1)</td><td> the v0.1 corpus, for continuity</td><td>40</td><td>100.0%</td><td>100.0%</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>overall</td><td> every case</td><td>243</td><td>58.0%</td><td>56.0%</td><td>81.5%</td><td><strong>79.4%</strong></td></tr></tbody>
+  </table></div>
+  
+  <h3 id="trimming">Tool trimming for the Foundation Models brain (recall@k)</h3>
+  <p>Share of cases whose expected tool (every step, for compound requests) is inside the set <code>ToolSelector</code> would offer the on-device model, out of 24 tools. This measures the trim, not the model. The selector reuses the deterministic grammar, so canonical rows are not independent of it.</p>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Split</th><th>Role</th><th>n</th><th>recall@6</th><th>recall@8</th></tr></thead>
+    <tbody><tr><td>v1 canonical</td><td><span class="tag gated">gated</span></td><td>29</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v1 paraphrase</td><td><span class="tag tuned">dev</span></td><td>11</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v2 canonical</td><td><span class="tag gated">gated</span></td><td>30</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v2 compound</td><td><span class="tag gated">gated</span></td><td>12</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v2 dev paraphrase</td><td><span class="tag tuned">dev</span></td><td>23</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v0.2 held-out (reported)</td><td><span class="tag honest">held-out</span></td><td>34</td><td>82.4%</td><td><strong>88.2%</strong></td></tr><tr><td>v0.3 dev paraphrase</td><td><span class="tag tuned">dev</span></td><td>51</td><td>100.0%</td><td><strong>100.0%</strong></td></tr><tr><td>v0.3 held-out (frozen)</td><td><span class="tag honest">held-out</span></td><td>53</td><td>86.8%</td><td><strong>90.6%</strong></td></tr><tr><td>overall</td><td></td><td>243</td><td>94.7%</td><td><strong>96.3%</strong></td></tr></tbody>
+  </table></div>
+  
+  <h3 id="rag">Ask your notes (retrieval and citations)</h3>
+  <p>Synthetic fixture of 22 notes and 61 questions, each with one relevant note and an answer span. recall@k: the relevant note is among the notes of the top k passages. Citation faithfulness: every <code>[n]</code> in the extractive answer follows a sentence found in a retrieved passage of note n. Span attribution: when the answer contains the span, its <code>[n]</code> points at a passage that contains the span.</p>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Method</th><th>n</th><th>recall@1</th><th>recall@3</th><th>Answer contains span</th><th>Citation faithfulness</th><th>Span attribution</th></tr></thead>
+    <tbody><tr><td>bm25</td><td>61</td><td>93.4%</td><td>96.7%</td><td>96.7%</td><td>100.0% of 130</td><td>100.0%</td></tr></tbody>
+  </table></div>
+  
+  <p class="note">Retrieval eval, hybrid: skipped (asset unavailable).</p><p class="note">Routing plus tool execution latency on the CI simulator (in-memory store): p50 6.71 ms, p95 15.68 ms. Latency varies between runner instances; accuracy is deterministic.</p>
+  
+</section>
+
+
+<section id="in-60-seconds" class="wrap prose"><h2>In 60 seconds</h2><ul>
+<li><strong>Product bet:</strong> the people who most need an AI assistant for their
+  work (consultants under NDA, founders, leads juggling workstreams) are
+  often the ones who cannot put that work into a cloud chatbot. iOS 26's
+  on-device model makes a useful assistant possible without that trade.</li>
+<li><strong>What it does:</strong> "create a project Launch, add 3 tasks for Friday and
+  link it to brand voice" runs as a visible five-step plan; "what do my
+  notes say about the venue?" answers with <code>[1]</code> citations to the source
+  notes; "remind me to take out the bins every other Thursday" creates a
+  recurring task; "undo that" reverts the whole last request. Each step is
+  a tool call against real structured data, not a chat reply.</li>
+<li><strong>How it stays reliable:</strong> a three-tier brain. Apple Foundation Models
+  with native tool calling and guided-generation plans, an optional MLX
+  build running Qwen3-4B, and a deterministic planner and router that
+  always work, so the product never shows "AI unavailable". Every
+  mutation is journaled with its inverse, so every action is undoable.</li>
+<li><strong>How it is measured:</strong> three synthetic evals run on every CI build;
+  the headline figures are in <a href="https://github.com/seanmcrae/pocketbrains-app#numbers">Numbers</a> and the misses in
+  <a href="https://github.com/seanmcrae/pocketbrains-app#where-it-fails">Where it fails</a>. No Foundation Models or MLX accuracy
+  is claimed yet.</li>
+<li><strong>Product docs:</strong> <a href="product.html">docs/PRODUCT.md</a> has the problem,
+  users, jobs to be done, metrics, local-versus-cloud trade-offs, decisions
+  and roadmap.</li>
+</ul>
+<!-- Demo GIF goes here once recorded on a device:
+     docs/img/demo.gif, about 15 seconds: a multi-step plan card, Undo,
+     then a cited "ask your notes" answer. -->
+<blockquote>
+<p><strong>Demo:</strong> a short device recording (plan card, Undo, cited answer) will
+go here as <code>docs/img/demo.gif</code>. Screenshots are not yet in the
+repository either; see <a href="#screenshots">Screenshots</a>.</p>
+</blockquote></section>
+
+<section id="architecture" class="wrap prose"><h2>Architecture</h2><pre class="mermaid">
+flowchart LR
+    U["User utterance&lt;br/&gt;or Siri / Shortcuts"] --&gt; O["AgentOrchestrator&lt;br/&gt;one journal group per turn"]
+    O --&gt; S{"Which brain?"}
+    S --&gt;|"Apple Intelligence"| FM["Foundation Models&lt;br/&gt;native Tool calling +&lt;br/&gt;@Generable plans"]
+    S --&gt;|"MLX build flag"| MLX["MLX Qwen3-4B&lt;br/&gt;JSON tool calls"]
+    S --&gt;|"otherwise"| DP["Deterministic router&lt;br/&gt;lexicon + NLTagger lemmas&lt;br/&gt;+ slot frames"]
+    FM -.-&gt;|"generation fails"| DP
+    FM --&gt; PL["Planner&lt;br/&gt;CompoundPlanner / PlanExecutor&lt;br/&gt;$N references, postconditions"]
+    MLX --&gt; TP["ToolCallParser&lt;br/&gt;one or many calls"] --&gt; PL
+    DP --&gt; PL
+    PL --&gt; TB["ToolBox&lt;br/&gt;24 tools"]
+    FM --&gt; TB
+    TB --&gt; J["Action journal&lt;br/&gt;inverse per mutation"]
+    J --&gt; UN["UndoEngine&lt;br/&gt;atomic per plan"]
+    TB --&gt; RAG["NotesRAG&lt;br/&gt;chunks, BM25 + NLEmbedding,&lt;br/&gt;cited answers"]
+    TB --&gt; INT["Integrations (opt-in)&lt;br/&gt;EventKit Calendar read,&lt;br/&gt;Reminders export"]
+    TB --&gt; DS["DataServices&lt;br/&gt;single write path"]
+    UN --&gt; DS
+    DS --&gt; DB[("SwiftData&lt;br/&gt;on device")]
+    DS --&gt; W["App Group snapshot"] --&gt; WG["Today widget"]
+    DS --&gt; V["Today / Projects /&lt;br/&gt;Knowledge spaces"]
+</pre>
+
+<p>Every brain emits the same event stream (tool started, tool finished,
+text snapshot, done); plans use it too, as a plan card that updates in
+place plus numbered step cards, so the UI never knows which brain
+answered. If a model reports itself available but fails to generate, the
+orchestrator swaps to the deterministic router and answers the same
+prompt. Agent, views, Siri intents and the widget feed all go through one
+service layer. Details: <a href="architecture.html">docs/ARCHITECTURE.md</a>.</p></section>
+
+<section id="why-on-device" class="wrap prose"><h2>Why on-device</h2><table>
+<thead>
+<tr>
+<th></th>
+<th>On-device (PocketBrains)</th>
+<th>Cloud assistant</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Client and personal data</td>
+<td>Never leaves the phone</td>
+<td>Sent to a provider</td>
+</tr>
+<tr>
+<td>Works offline / Airplane Mode</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Per-request cost</td>
+<td>None, no backend</td>
+<td>Per token</td>
+</tr>
+<tr>
+<td>Reasoning headroom</td>
+<td>Smaller model, so its job is kept small: pick a tool, fill arguments</td>
+<td>Large models, long context</td>
+</tr>
+<tr>
+<td>Device coverage</td>
+<td>Apple Intelligence devices, plus MLX and deterministic tiers</td>
+<td>Any connected device</td>
+</tr>
+</tbody>
+</table>
+<p>The design keeps the model's job narrow and puts the data work in
+deterministic, tested code. That is what makes a ~3B on-device model
+sufficient for this product.</p></section>
+
+<section id="build-and-run" class="wrap prose"><h2>Build and run</h2><p>Requirements: a Mac with Xcode 26 (iOS 26 SDK) and
+<a href="https://github.com/yonaskolb/XcodeGen">XcodeGen</a>. The Xcode project is
+generated from <code>project.yml</code> and is not committed.</p>
+<pre><code class="language-bash">brew install xcodegen
+git clone https://github.com/seanmcrae/pocketbrains-app.git
+cd pocketbrains-app
+xcodegen generate
+open PocketBrains.xcodeproj
+</code></pre>
+<p>Run on an iOS 26 simulator or device. On hardware with Apple Intelligence
+the Foundation Models brain engages automatically; elsewhere, including
+the simulator, the deterministic router answers. Settings, Intelligence
+lets you force the deterministic brain. Calendar and Reminders stay off
+until you enable them in Settings, Integrations. The Today widget builds
+unsigned in CI; to run it on a device, sign both the app and
+<code>PocketBrainsWidget</code> with your team and keep the App Group
+<code>group.com.pocketbrains.shared</code> on both (declared in <code>project.yml</code>). To
+build the optional MLX backend,
+follow the comments in <code>project.yml</code> (adds the mlx-swift-examples package
+and the <code>POCKETBRAINS_MLX</code> flag; the model is a ~2.3 GB download on first
+use).</p>
+<p>Tests, exactly as CI runs them:</p>
+<pre><code class="language-bash">xcodebuild test -project PocketBrains.xcodeproj -scheme PocketBrains \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO
+</code></pre></section>
+
+<section id="limitations" class="wrap prose"><h2>Limitations</h2><ul>
+<li><strong>Not released.</strong> No App Store build, no users, no telemetry. The app
+  has been run on the iOS 26 simulator; the Foundation Models path,
+  including guided-generation planning, has not been verified on device in
+  this repository (see <a href="verification.html">docs/VERIFICATION.md</a>).</li>
+<li><strong>The deterministic floor is rigid off-grammar</strong>: 39.6% end to end on
+  the frozen v0.3 held-out paraphrases (see <a href="https://github.com/seanmcrae/pocketbrains-app#where-it-fails">Where it fails</a>).</li>
+<li><strong>Tool budget on the ~3B model.</strong> By default Foundation Models sees 22
+  tools (24 with both integrations on). Per-request trimming exists but
+  ships off, and a trimmed session does not carry multi-turn context.</li>
+<li><strong>Integrations are untested on device.</strong> EventKit is covered by mapping
+  tests behind protocols; the permission flows, Siri phrases and the
+  widget need a device or simulator run by hand. The widget needs the App
+  Group capability when signed.</li>
+<li><strong>MLX is opt-in and not compiled in CI.</strong> Its tool-call parser,
+  including multi-call plans, is tested.</li>
+<li><strong>English only</strong>, fixed type sizes (Dynamic Type mapping is pending,
+  #8), and the VoiceOver pass is incomplete.</li>
+<li><strong>Semantic search and passage embeddings</strong> are brute-force cosine over a
+  personal-scale corpus and are disabled under the test host, so tests
+  cover the keyword path.</li>
+<li>Open engineering items are tracked in <a href="https://github.com/seanmcrae/pocketbrains-app/blob/main/docs/QA_REPORT.md">docs/QA_REPORT.md</a>.</li>
+</ul></section>
+
+
+<section class="wrap prose">
+  <h2>More</h2>
+  <ul>
+    <li><a href="architecture.html">Architecture</a>: the agent loop, planner, journal and undo, cited retrieval, router tiers, tool trimming.</li>
+    <li><a href="product.html">Product brief</a>: problem, users, scope, metrics, trade-offs, roadmap.</li>
+    <li><a href="verification.html">Verification checklist</a>: what CI covers, what needs a device.</li>
+  </ul>
+</section>
+
+</main>
+<footer class="wrap footer">
+  <p>PocketBrains 0.3.0 &middot; Sean McRae &middot; <a href="https://github.com/seanmcrae/pocketbrains-app">Source on GitHub</a>.
+  No license has been chosen yet; the code is published for review.
+  Every number on this site is parsed from a CI build log of the iOS test suite on the bundled
+  synthetic corpora (<a href="https://github.com/seanmcrae/pocketbrains-app/actions/runs/37745540170">run 37745540170</a>).</p>
+</footer>
+<script type="module">
+  // Diagrams render when the CDN is reachable; otherwise their source stays readable.
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+</script>
+</body>
+</html>

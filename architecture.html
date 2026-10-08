@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PocketBrains: architecture</title>
+<meta name="description" content="PocketBrains: a private chief of staff for tasks, projects and notes, run by an AI agent that lives entirely on the iPhone.">
+<link rel="canonical" href="https://seanmcrae.github.io/pocketbrains-app/">
+<style>:root{--ink:#1d2733;--muted:#56657a;--line:#dde3ea;--soft:#f4f6f9;--accent:#9a6a12;--link:#1f5fa8;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:4rem}
+body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:#fff}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:0 1.25rem}
+.topbar{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.95);border-bottom:1px solid var(--line)}
+.topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;height:3.25rem}
+.brand{font-weight:700;color:var(--ink);font-family:var(--mono)}
+nav{display:flex;flex-wrap:wrap;gap:1.1rem;font-size:.92rem}nav a{color:var(--muted)}
+.hero{background:linear-gradient(180deg,var(--soft),#fff);padding:3.5rem 0 1rem;border-bottom:1px solid var(--line)}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;color:var(--accent);font-weight:600;margin:0}
+.hero h1{font-size:clamp(1.7rem,3.4vw,2.5rem);line-height:1.2;margin:.5rem 0 1rem;max-width:22em}
+.lede{font-size:1.1rem;color:var(--muted);max-width:44em}
+.cta{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.5rem 0}
+.button{display:inline-block;padding:.5rem 1rem;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font-weight:500}
+.button.primary{background:var(--ink);border-color:var(--ink);color:#fff}.button:hover{text-decoration:none;border-color:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin:2rem 0}
+.stat{background:#fff;border:1px solid var(--line);border-radius:8px;padding:1rem 1.1rem}
+.stat-label{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.stat-value{font-size:1.6rem;font-weight:700;font-family:var(--mono);margin:.2rem 0;overflow-wrap:anywhere}
+.stat-detail{font-size:.88rem;color:var(--muted)}
+figure{margin:1.5rem 0}figure img{max-width:100%;height:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
+figcaption{font-size:.88rem;color:var(--muted);margin-top:.5rem}
+.diagram img{padding:.75rem}
+.prose{padding-top:2.5rem}
+.prose h2{font-size:1.6rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+.prose h3{font-size:1.15rem;margin-top:1.8rem}
+.prose li{margin:.25rem 0}
+.note{color:var(--muted);font-size:.92rem}
+code{font-family:var(--mono);font-size:.88em;background:var(--soft);padding:.1em .3em;border-radius:4px}
+pre{background:#1d2733;color:#e8edf3;padding:1rem;border-radius:8px;overflow-x:auto;font-size:.85rem;line-height:1.5}
+pre code{background:none;padding:0;color:inherit;font-size:inherit}
+.table-scroll{overflow-x:auto}
+table{border-collapse:collapse;margin:1rem 0;font-size:.88rem;width:100%}
+th,td{border-bottom:1px solid var(--line);padding:.45rem .6rem;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{background:var(--soft);font-weight:600}
+.prose table th,.prose table td{text-align:left;white-space:normal}
+#results th,#results td{text-align:right;white-space:nowrap}
+#results th:first-child,#results td:first-child{text-align:left}
+details{margin:.5rem 0 1rem}summary{cursor:pointer;color:var(--muted);font-size:.9rem}
+.with-toc{display:grid;grid-template-columns:220px 1fr;gap:2.5rem;padding-top:2rem}
+.toc{position:sticky;top:4.5rem;align-self:start;font-size:.9rem}
+.toc ul{list-style:none;padding:0;margin:0}.toc li{margin:.35rem 0}
+.toc-title{font-weight:600;margin-top:0}
+.with-toc .prose{padding-top:0}.with-toc h1{margin-top:0}
+.footer{border-top:1px solid var(--line);margin-top:3rem;padding:1.5rem 1.25rem;color:var(--muted);font-size:.88rem}
+@media (max-width:760px){.with-toc{grid-template-columns:1fr}.toc{position:static}nav{gap:.7rem}.topbar-inner{height:auto;padding:.5rem 1.25rem}}
+.hero-head{display:flex;align-items:center;gap:1rem}.hero-head img{width:56px;height:56px;border-radius:12px}
+.tag{display:inline-block;font-size:.75rem;padding:.05rem .45rem;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.honest{border-color:#2f7d4f;color:#2f7d4f}.tag.tuned{border-color:#9a6a12;color:#9a6a12}.tag.gated{border-color:var(--ink);color:var(--ink)}
+pre.mermaid{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.callout{border-left:3px solid var(--accent);background:var(--soft);padding:.75rem 1rem;border-radius:0 6px 6px 0}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="index.html">PocketBrains</a>
+    <nav>
+      <a href="index.html#evaluation">Evaluation</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="product.html">Product brief</a>
+      <a href="verification.html">Verification</a>
+      <a href="https://github.com/seanmcrae/pocketbrains-app">GitHub</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<div class="wrap with-toc">
+  <aside class="toc">
+    <p class="toc-title">Architecture</p>
+    <ul><li><a href="#system-overview">System overview</a></li><li><a href="#layers">Layers</a></li><li><a href="#the-agent-loop">The agent loop</a></li><li><a href="#data-layer">Data layer</a></li><li><a href="#presentation-and-design-system">Presentation and design system</a></li><li><a href="#testing-and-ci">Testing and CI</a></li></ul>
+  </aside>
+  <article class="prose">
+    <h1>Architecture</h1>
+    <p>One conversational surface, real structured data underneath, all
+intelligence on the device. This document describes the code as it is on
+<code>main</code>; where something is planned rather than built, it says so.</p>
+<h2 id="system-overview">System overview</h2>
+<pre class="mermaid">
+flowchart TB
+    subgraph UI["Presentation (SwiftUI + Metal)"]
+        Thread["Thread&lt;br/&gt;tool, plan and citation cards, Undo"]
+        Spaces["Spaces: Today, Projects, Knowledge"]
+        Intents["App Intents / App Shortcuts&lt;br/&gt;Ask, Add task, What's blocking"]
+        Widget["Today widget (extension)"]
+        Settings["Settings, Integrations&lt;br/&gt;explicit opt-in"]
+    end
+
+    subgraph Agent["Agent layer"]
+        Orch["AgentOrchestrator&lt;br/&gt;turn state, journal group per turn, brain swap"]
+        Select{"AgentVoice.selectBackend"}
+        Planner["CompoundPlanner&lt;br/&gt;split, expand, thread context"]
+        Exec["PlanExecutor&lt;br/&gt;$N refs, postconditions, stop safely"]
+        Undo["UndoEngine&lt;br/&gt;validate all, then apply"]
+    end
+
+    subgraph Brains["ModelBackend implementations"]
+        FM["FoundationModelBackend&lt;br/&gt;native Tool + @Generable plans"]
+        MLX["MLXBackend (opt-in build flag)&lt;br/&gt;one or many tool_call envelopes"]
+        Fallback["IntentFallbackBackend&lt;br/&gt;IntentGrammar: CommandFrames + ParaphraseFrames + Lexicon (NLTagger)"]
+        Selector["ToolSelector (optional)&lt;br/&gt;about 8 of 24 tools per request"]
+    end
+
+    subgraph Tools["Tools"]
+        Registry["AgentToolRegistry&lt;br/&gt;24 backend-neutral specs"]
+        ToolBox["ToolBox&lt;br/&gt;canonical implementation, journals inverses"]
+        Dates["NaturalDateParser&lt;br/&gt;dates + exact phrase"]
+    end
+
+    subgraph Data["Data layer"]
+        Services["DataServices&lt;br/&gt;single write path + JournalService"]
+        Store[("SwiftData store")]
+        RAG["NotesRAG&lt;br/&gt;NoteChunk, BM25 + NLEmbedding"]
+        Index["SemanticIndex&lt;br/&gt;note vectors"]
+        EK["Integrations&lt;br/&gt;EventKit behind protocols"]
+        Snap["WidgetPublisher&lt;br/&gt;App Group JSON snapshot"]
+    end
+
+    Thread --&gt; Orch --&gt; Select
+    Select --&gt; FM &amp; MLX &amp; Fallback
+    Selector -.-&gt;|"Focused tool list"| FM
+    FM --&gt; Planner
+    Fallback --&gt; Planner
+    Planner --&gt; Exec
+    MLX --&gt; Exec
+    FM --&gt; ToolBox
+    Fallback --&gt; Registry
+    Exec --&gt; Registry --&gt; ToolBox
+    Thread --&gt;|Undo| Undo
+    ToolBox --&gt; Undo
+    ToolBox --&gt; Dates
+    ToolBox --&gt; Services
+    ToolBox --&gt; RAG
+    ToolBox --&gt; EK
+    Undo --&gt; Services
+    Spaces --&gt; Services
+    Intents --&gt; ToolBox
+    Settings --&gt; EK
+    Services --&gt; Store
+    Services --&gt; Snap --&gt; Widget
+    RAG --&gt; Store
+    RAG --&gt; Index
+</pre>
+
+<h2 id="layers">Layers</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Path</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>App</td>
+<td><code>Sources/App</code></td>
+<td>Entry point, <code>AppModel</code> (one <code>zoom</code> scalar drives the thread/spaces transition), <code>RootShell</code>, App Intents</td>
+</tr>
+<tr>
+<td>Agent</td>
+<td><code>Sources/Agent</code></td>
+<td><code>AgentOrchestrator</code>, <code>ToolBox</code>, <code>AgentToolRegistry</code>, <code>ToolCallParser</code>, <code>UndoEngine</code>, <code>NaturalDateParser</code>, <code>BriefEngine</code>; <code>Planner/</code> (<code>CompoundPlanner</code>, <code>PlanExecutor</code>, <code>AgentPlan</code>); <code>Router/</code> (<code>IntentGrammar</code>, <code>CommandFrames</code>, <code>ParaphraseFrames</code>, <code>Lexicon</code>, <code>ToolSelector</code>)</td>
+</tr>
+<tr>
+<td>Intelligence</td>
+<td><code>Sources/Intelligence</code></td>
+<td><code>ModelBackend</code> protocol, the three backends, <code>SemanticIndex</code>; <code>Retrieval/</code> (<code>NoteChunker</code>, <code>BM25Index</code>, <code>NotesRAG</code>, <code>CitedAnswerComposer</code>)</td>
+</tr>
+<tr>
+<td>Integrations</td>
+<td><code>Sources/Integrations</code></td>
+<td><code>CalendarReading</code> / <code>RemindersWriting</code> protocols, <code>EventKitCalendar</code> / <code>EventKitReminders</code>, <code>AgendaComposer</code>, <code>ReminderMapper</code>, <code>WidgetPublisher</code></td>
+</tr>
+<tr>
+<td>Data</td>
+<td><code>Sources/Data</code></td>
+<td>SwiftData models (including <code>JournalEntry</code>, <code>NoteChunk</code>, <code>RecurrenceRule</code>, <code>ReminderExport</code>), <code>DataServices</code>, <code>Store</code>, <code>SearchEngine</code>, <code>NotificationPlanner</code>, JSON <code>Exporter</code>, <code>SeedData</code></td>
+</tr>
+<tr>
+<td>Shared and widget</td>
+<td><code>Shared</code>, <code>Widget</code></td>
+<td><code>WidgetSnapshot</code> (compiled into both targets) and the WidgetKit extension</td>
+</tr>
+<tr>
+<td>Design system</td>
+<td><code>Sources/DesignSystem</code>, <code>Sources/Shaders</code></td>
+<td>Tokens (theme, type, motion, layout), <code>GlassSurface</code>, components, haptics, <code>LiquidGlass.metal</code></td>
+</tr>
+<tr>
+<td>Features</td>
+<td><code>Sources/Features</code></td>
+<td>Thread, Today, Projects, Knowledge, Spaces search overlay, Settings, Privacy story and onboarding</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-agent-loop">The agent loop</h2>
+<p><code>ModelBackend</code> is a small <code>@MainActor</code> protocol:</p>
+<pre><code class="language-swift">protocol ModelBackend {
+    var displayName: String { get }
+    func reply(to prompt: String) -&gt; AsyncThrowingStream&lt;AgentEvent, Error&gt;
+    func resetConversation()
+}
+
+enum AgentEvent {
+    case toolStarted(name: String, summary: String)
+    case toolFinished(ToolEventRecord)
+    case text(String)          // cumulative snapshot, not a delta
+    case done(finalText: String)
+}
+</code></pre>
+<p>Every backend speaks this event language, so the thread UI does not know
+which brain answered. A turn in <code>AgentOrchestrator</code>:</p>
+<ol>
+<li>Persist the user's <code>ChatMessage</code>, set phase <code>.thinking</code>.</li>
+<li>Iterate the backend's stream. <code>toolStarted</code> / <code>toolFinished</code> become
+   inline tool cards (phase <code>.acting</code>); <code>text</code> snapshots drive the
+   condensation renderer (phase <code>.streaming</code>); <code>done</code> persists the agent
+   message with its tool records.</li>
+<li><strong>Brain swap on failure.</strong> If the stream throws before any text arrived
+   and the active brain is not the fallback, the orchestrator replaces it
+   with <code>IntentFallbackBackend</code> and re-runs the same prompt once. This
+   covers the case where a model reports itself available but cannot
+   generate (for example, Apple Intelligence enabled with assets not yet
+   downloaded). If that also fails, the turn ends with a retryable message.</li>
+<li><code>retryLast()</code> re-runs the last prompt without re-posting the bubble.</li>
+<li><strong>Journal group.</strong> Before each turn the orchestrator sets
+   <code>ToolBox.turnGroupID</code> to a fresh id, so every mutation in the turn
+   (one tool call, a native multi-turn tool sequence, or a whole plan) is
+   journaled under one group and "undo that" reverts all of it. Cards are
+   matched by record id, so a plan card can update in place.</li>
+</ol>
+<h3 id="backend-selection">Backend selection</h3>
+<p><code>AgentVoice.selectBackend</code> runs at launch and when the Settings preference
+changes:</p>
+<table>
+<thead>
+<tr>
+<th>Order</th>
+<th>Backend</th>
+<th>When</th>
+<th>Tool calling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>FoundationModelBackend</code></td>
+<td><code>SystemLanguageModel.default.availability == .available</code> and preference is Automatic</td>
+<td>Native <code>Tool</code> conformances with <code>@Generable</code> argument structs; streamed snapshots; optionally only the tools <code>ToolSelector</code> picks for the request</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>MLXBackend</code></td>
+<td>Compiled only with <code>-D POCKETBRAINS_MLX</code> plus the mlx-swift-examples package</td>
+<td>System prompt lists the registry as JSON; the model replies with a <code>&lt;tool_call&gt;</code> envelope; <code>ToolCallParser</code> extracts it; up to 4 tool hops per turn</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>IntentFallbackBackend</code></td>
+<td>Always available; forced by Settings, Quick intents</td>
+<td><code>routeTurn</code>: compound requests become a plan (<code>CompoundPlanner</code> then <code>PlanExecutor</code>); single ones go through <code>IntentGrammar</code> to one registry call. Replies are templated and streamed word by word so the UI behaves identically</td>
+</tr>
+</tbody>
+</table>
+<h3 id="per-request-tool-trimming-foundation-models">Per-request tool trimming (Foundation Models)</h3>
+<p>The on-device model is offered every tool's schema on every request: 22
+tools, or 24 with both integrations on. With Settings, Intelligence,
+"Focused tool list" switched on (<code>ToolTrimming</code>, off by default),
+<code>FoundationModelBackend</code> builds a one-request session that offers only
+the tools <code>ToolSelector</code> picks:</p>
+<ol>
+<li>The deterministic grammar's own reading of the request scores
+   highest: the tool <code>IntentGrammar.parse</code> returns, each step of a
+   <code>CompoundPlanner</code> plan, then the parse's fallbacks.</li>
+<li>Lexicon verbs (by lemma) vote for their action's tools; for example a
+   reschedule verb votes for <code>rescheduleTask</code> and <code>updateTask</code>.</li>
+<li>Cue words vote for the tools they usually mean ("milestone",
+   "overdue", "according to", "calendar", "reminders").</li>
+<li>A date phrase votes for the date-taking tools.</li>
+</ol>
+<p><code>createTask</code>, <code>searchEverything</code>, <code>agenda</code> and <code>undo</code> are always offered,
+so a poor trim can still capture, search, answer with the agenda or undo.
+At most 8 tools are offered (the default limit); only tools with a
+positive score fill the room after the core, so simple requests often get
+fewer. Ties break by registry order, so a request always gets the same
+set, and tools the user has not opted into are never offered. Trade-off:
+the trimmed session is fresh per request, so it does not carry
+multi-turn context; compound requests still plan with the full catalog.
+The eval measures recall@k of the trim (is the expected tool, or every
+step of a compound request, inside the set); it does not measure what the
+model then does with it.</p>
+<h3 id="multi-step-planning">Multi-step planning</h3>
+<p>A plan is an ordered list of <code>PlanStep(tool, arguments)</code>. Argument values
+may reference earlier steps: <code>$2</code> is step 2's exact reference
+(<code>id:&lt;uuid&gt;</code> of what it created), <code>$2.title</code> any named output, <code>$last</code> the
+most recent step that produced a reference. Every service
+<code>find(matching:)</code> resolves <code>id:</code> references before fuzzy title matching,
+so a project created in step 1 is the one tasks are filed into, even when
+a similarly named project exists.</p>
+<p>Where plans come from:</p>
+<ul>
+<li><strong>Deterministic:</strong> <code>CompoundPlanner.split</code> cuts on ", and then", ", then",
+  " and ", commas and semicolons, but only where the next words open a
+  command (a verb from a fixed list), so "call mum and dad" stays one task.
+  Each clause is parsed by <code>IntentGrammar</code>; "add 3 tasks…" and "add tasks:
+  a, b and c" expand to one step per task; tasks after a <code>createProject</code>
+  are filed under it; pronouns resolve to the item the request is about.
+  A clause nothing recognizes cancels planning (the request stays single).</li>
+<li><strong>Foundation Models:</strong> when a request splits into more than one clause,
+  a tool-less planning session generates a <code>@Generable</code> <code>GeneratedPlan</code>
+  (steps of tool name plus name/value arguments, <code>$N</code> references allowed).
+  Unknown tool names reject the plan; the deterministic planner is the
+  fallback. After execution a separate tool-less session narrates the
+  outcome, so narration can never re-run a tool. Requests that do not
+  split use native multi-turn tool calling; those calls are numbered as
+  steps on their cards.</li>
+<li><strong>MLX:</strong> several <code>&lt;tool_call&gt;</code> envelopes in one reply
+  (<code>ToolCallParser.parseAll</code>) run as a plan.</li>
+</ul>
+<p><code>PlanExecutor.execute</code> resolves references, runs each step through the
+registry, and checks a postcondition (the created task exists and is in
+the requested project, the completed task is done, the link exists, and so
+on). The first failed step stops the plan; if that step had written
+something before failing its postcondition, its own journal entry is
+reverted first. Remaining steps are marked skipped. The user sees a
+message naming the step and the problem, and whether earlier steps are in
+place (and undoable) or nothing changed. Events: a <code>plan</code> card with the
+numbered outline, <code>toolStarted</code>/<code>toolFinished</code> per step with a "2/5"
+label, and the final plan card (same id) with ✓ / ✗ / – marks and an
+<code>undoGroup</code>.</p>
+<h3 id="action-journal-and-undo">Action journal and undo</h3>
+<p>Every mutating <code>ToolBox</code> method records a <code>JournalEntry</code> (tool, summary,
+group, encoded <code>[InverseStep]</code>): delete what was created, reopen what was
+completed, restore a task snapshot after an update, restore a note body
+after an append, delete a link, move a repeat rule back, remove an
+exported reminder. <code>UndoEngine</code> reverts one entry, a group, or "the last
+turn" (<code>undo</code> tool, scope <code>turn</code> or <code>step</code>). It validates every inverse
+before applying any, so a group either reverts completely or not at all
+(for example, if a task was deleted behind the journal's back, its restore
+cannot apply and nothing changes). Deleting something already gone counts
+as done. Undo of a recurring task's completion moves the rule back to the
+original and deletes the spawned occurrence.</p>
+<h3 id="ask-your-notes-cited-retrieval">Ask your notes (cited retrieval)</h3>
+<ul>
+<li><code>NoteChunker</code> splits a note into sentence-bounded passages of about 80
+  words (NLTokenizer), each repeating the previous passage's last sentence.</li>
+<li><code>NotesRAG</code> stores them as <code>NoteChunk</code> rows with an NLEmbedding sentence
+  vector when the asset exists. <code>sync(notes:)</code> re-cuts only notes whose
+  content hash changed and drops chunks of deleted notes; it runs before
+  every question, so edits from the note editor, undo or the agent are
+  always reflected. <code>upsert</code> runs immediately after agent writes.</li>
+<li>Ranking fuses BM25 over title plus passage tokens (stemmed, stopwords
+  removed) with cosine similarity by reciprocal rank (k = 60); candidates
+  need a positive keyword score or a cosine above 0.45.</li>
+<li><code>CitedAnswerComposer</code> picks the passages' sentences that best overlap
+  the question and numbers sources by first use, one number per note. The
+  deterministic brain shows that extractive answer; the model brains get
+  the same numbered passages with the instruction to answer only from them
+  and cite <code>[n]</code>. Citations travel on the tool record and render as chips
+  that open the note.</li>
+</ul>
+<h3 id="system-integrations-opt-in">System integrations (opt-in)</h3>
+<p>EventKit is confined to <code>EventKitBridge.swift</code> behind <code>CalendarReading</code>
+and <code>RemindersWriting</code>, created lazily on first opt-in use. <code>Integrations</code>
+answers "ready" only when the Settings switch is on and iOS has granted
+full access. <code>calendarAgenda</code> reads events for a <code>DayWindow</code> ("this
+afternoon" starts now if the afternoon is under way) and adds free
+stretches and tasks due; <code>AgendaComposer</code> and <code>ReminderMapper</code> are the
+pure, tested mapping. <code>exportToReminders</code> records each export in
+<code>ReminderExport</code> so a task is never exported twice and undo deletes
+exactly those reminders. Foundation Models is offered the two tools only
+after opt-in. The Morning Brief shows a calendar line when ready.</p>
+<h3 id="app-intents-and-widget">App Intents and widget</h3>
+<p><code>IntentRuntime</code> holds one <code>ToolBox</code> on the shared container, so Siri
+actions are journaled like thread actions. Shortcuts: Ask PocketBrains
+(runs the selected brain, falls back to the deterministic one), Add Task,
+What's Blocking <code>&lt;project&gt;</code> (a <code>ProjectEntity</code> with a string query), and
+Capture Note. <code>WidgetPublisher</code> writes a JSON <code>WidgetSnapshot</code> (brief
+headline, counts, next tasks) into the App Group container after every
+task mutation and reloads the timeline; the widget extension only reads
+that file. Without the App Group entitlement (unsigned builds) publishing
+is skipped and the widget shows its placeholder.</p>
+<p>All three share <code>AgentVoice.instructions()</code> so the voice is consistent.</p>
+<h3 id="tools">Tools</h3>
+<p><code>ToolBox</code> is the one implementation of every capability. The Foundation
+Models bridge (<code>FoundationModelBackend.swift</code>), the registry used by MLX,
+and the fallback router all call into it, and it calls into
+<code>DataServices</code>. Every tool returns a <code>ToolResult</code> with a one-line <code>summary</code>
+for the card, a <code>detail</code> the model reads, and <code>succeeded</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Arguments (required in bold)</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>createTask</code></td>
+<td><strong>title</strong>, due, priority, project, repeats</td>
+<td>Creates a task; due parsed by <code>NaturalDateParser</code>; a repeat rule attaches a <code>RecurrenceRule</code> and sets the first due date</td>
+</tr>
+<tr>
+<td><code>completeTask</code></td>
+<td><strong>query</strong></td>
+<td>Marks a task done; a recurring task spawns its next occurrence</td>
+</tr>
+<tr>
+<td><code>updateTask</code></td>
+<td><strong>query</strong>, due, priority, project</td>
+<td>Reschedules, reprioritises or moves a task; reports "no changes" honestly</td>
+</tr>
+<tr>
+<td><code>rescheduleTask</code></td>
+<td><strong>query</strong>, to, by</td>
+<td>New absolute date, or a shift from the current due date</td>
+</tr>
+<tr>
+<td><code>snoozeTask</code></td>
+<td><strong>query</strong>, until</td>
+<td>From today: tomorrow by default, "3 days", "until Monday"</td>
+</tr>
+<tr>
+<td><code>setPriority</code></td>
+<td><strong>query</strong>, <strong>priority</strong></td>
+<td>Strict parse; unknown words fail instead of guessing</td>
+</tr>
+<tr>
+<td><code>setRecurrence</code></td>
+<td><strong>query</strong>, <strong>rule</strong></td>
+<td>Daily, weekdays, every N weeks or days, or "none"</td>
+</tr>
+<tr>
+<td><code>queryTasks</code></td>
+<td><strong>filter</strong>, project</td>
+<td><code>today</code>, <code>overdue</code>, <code>blocked</code>, <code>upcoming</code> (7 days) or <code>all</code></td>
+</tr>
+<tr>
+<td><code>createProject</code></td>
+<td><strong>name</strong>, summary</td>
+<td>Creates a project with an identity hue</td>
+</tr>
+<tr>
+<td><code>projectStatus</code></td>
+<td><strong>name</strong></td>
+<td>Progress, blockers and what they wait on, next milestones, recent activity</td>
+</tr>
+<tr>
+<td><code>addMilestone</code></td>
+<td><strong>project</strong>, <strong>title</strong>, target</td>
+<td>Adds a dated milestone</td>
+</tr>
+<tr>
+<td><code>listMilestones</code></td>
+<td><strong>project</strong></td>
+<td>Milestones, soonest first, with reached marks</td>
+</tr>
+<tr>
+<td><code>createNote</code></td>
+<td><strong>title</strong>, <strong>body</strong>, project</td>
+<td>Captures and indexes a note, auto-weaves links</td>
+</tr>
+<tr>
+<td><code>appendNote</code></td>
+<td><strong>query</strong>, <strong>text</strong></td>
+<td>Appends to a note and re-indexes it</td>
+</tr>
+<tr>
+<td><code>askNotes</code></td>
+<td><strong>question</strong></td>
+<td>Retrieves passages and answers with <code>[n]</code> citations</td>
+</tr>
+<tr>
+<td><code>searchNotes</code></td>
+<td><strong>query</strong></td>
+<td>Semantic plus keyword note search</td>
+</tr>
+<tr>
+<td><code>searchEverything</code></td>
+<td><strong>query</strong></td>
+<td>Tasks, projects and notes in one query</td>
+</tr>
+<tr>
+<td><code>notesFrom</code></td>
+<td><strong>day</strong></td>
+<td>Full text of notes created or edited on a day</td>
+</tr>
+<tr>
+<td><code>linkItems</code></td>
+<td><strong>from</strong>, <strong>to</strong>, relation</td>
+<td>Typed knowledge-graph edge</td>
+</tr>
+<tr>
+<td><code>agenda</code></td>
+<td>none</td>
+<td>Overdue, due today, blocked, and this week</td>
+</tr>
+<tr>
+<td><code>calendarAgenda</code></td>
+<td>window</td>
+<td>Opt-in: events, free stretches and tasks due in a day window</td>
+</tr>
+<tr>
+<td><code>exportToReminders</code></td>
+<td>scope</td>
+<td>Opt-in: copies tasks to Apple Reminders, idempotent and undoable</td>
+</tr>
+<tr>
+<td><code>recall</code></td>
+<td><strong>query</strong></td>
+<td>Searches past conversation and completed work</td>
+</tr>
+<tr>
+<td><code>undo</code></td>
+<td>scope</td>
+<td>Reverts the last turn (whole plan) or only the last action</td>
+</tr>
+</tbody>
+</table>
+<p>Task and project lookup try a verbatim title match first, then fall back
+to stemmed content-word overlap (every query word, or all but one for
+queries of three or more words), preferring open tasks.</p>
+<h3 id="deterministic-fallback-router">Deterministic fallback router</h3>
+<p><code>IntentGrammar.parse</code> turns a clause into a <code>ParsedIntent</code> (tool,
+arguments, optional fallbacks) without executing it, so the planner can
+build and show a plan first. Order:</p>
+<ol>
+<li><code>CommandFrames.beforeCapture</code>: phrasings the capture rules would
+   mis-read ("remind me about X later" is a snooze; "every Friday I need
+   to…" is a recurring task).</li>
+<li>The v0.1 capture rules (remind me, add a task, todo, I need to, note,
+   jot), now cutting a repeat phrase (<code>Recurrence.phrase</code>) and the exact
+   date phrase (<code>NaturalDateParser.match</code>) out of titles.</li>
+<li>Undo.</li>
+<li><code>CommandFrames.commands</code>: a slot grammar over the lowercased clause
+   for the v0.2 tools (reschedule, snooze, priority, recurrence,
+   milestones, append, search everything) and common rewordings of v0.1
+   intents (done with X, how is X going, add X to my list). Slot values
+   are cut from the original text by offset, so capitalization survives.</li>
+<li>The v0.1 rules: ask your notes, calendar, Reminders export, agenda,
+   blockers and status, completion, summaries, links, search, recall, new
+   projects.</li>
+<li><code>CommandFrames.paraphrase</code>: tokens and lemmas from NLTagger (<code>.lemma</code>,
+   <code>.lexicalClass</code>; a rule-based lemmatizer covers missing assets); the
+   first verb whose lemma is in the <code>Lexicon</code> synonym sets decides the
+   intent and the slots around it are filled the same way.</li>
+<li><code>CommandFrames.questionFallback</code> (v0.3): a factual wh-question nothing
+   else claimed goes to <code>askNotes</code>; one scoped to today or this week goes
+   to the agenda.</li>
+<li>Otherwise the agenda, with an honest note about quick-intent mode.</li>
+</ol>
+<p>v0.3 adds <code>ParaphraseFrames</code> (constructions rather than sentences),
+tuned only against the v0.3 dev split. Leading interjections ("Wait,",
+"Not now,") are dropped first. Early frames, before the capture rules:
+"remind me what/who…" is a question, "remind me about X tomorrow" moves an
+existing task (or captures it if there is none), "ping me tomorrow to X",
+a reminder asked for as a noun ("can I get a reminder to…"), and labelled
+captures ("Task: …", "Idea: …", "keep in mind…"). Command frames, before
+the v0.2 ones: statements of state ("the gutters are clean", "that's the
+passport sorted", "X is really important", "X isn't a priority", "X is now
+due Monday", "X comes round every 4 weeks"), subject-first requests ("can
+the invoice slip to Thursday"), a shift without a preposition ("kick the
+report out a couple of days"), past-tense reports ("paid the water bill"
+completes "pay the water bill"), quoted text placed into a named note,
+verbless project status ("Q3 planning progress?"), list states ("still
+open", "stuck"), and searches over everything or over notes. The
+Reminders export check moved ahead of the command frames so "push today's
+list to Apple Reminders" is not read as a reschedule, and "do" left the
+completion lexicon because, as an auxiliary, it turned questions into
+completions.</p>
+<p><code>NaturalDateParser</code> covers relative days, weekdays (full, abbreviated,
+"next"/"this"/"every other"), "in N days/weeks/months", "in a fortnight",
+period ends, weekends, explicit dates (NSDataDetector) and a time of day.</p>
+<p>The router is measured by the eval in <code>Tests/Eval</code> (243 synthetic
+utterances in eight splits, including two frozen held-out paraphrase
+splits whose misses are never itemized; results in the README).
+Canonical and compound phrasing is gated at 100%.</p>
+<h2 id="data-layer">Data layer</h2>
+<p>SwiftData models: <code>TaskItem</code> (named to avoid Swift Concurrency's <code>Task</code>),
+<code>Project</code>, <code>Milestone</code>, <code>Note</code>, <code>KnowledgeLink</code> (typed edge between any
+two entities), <code>ChatMessage</code> (persistent transcript with tool records),
+<code>EmbeddingRecord</code> (vector cache keyed by a stable content hash), and in
+v0.2 <code>JournalEntry</code> (inverse operations per mutation), <code>NoteChunk</code>
+(retrieval passages), <code>RecurrenceRule</code> and <code>ReminderExport</code>. The v0.2
+models are new entities rather than new attributes on existing ones, so
+existing stores migrate by adding tables, and they use only attribute
+types proven on the iOS 26 runtime (String, Int, Date, Date?, Data,
+unique UUID); <code>AAStoreDiagnostics</code> inserts a journal entry to keep that
+checked.</p>
+<p>Several shapes are deliberate workarounds for traps found on the iOS 26
+runtime during CI: task dependencies are stored as packed UUID <code>Data</code>
+rather than a self-referential relationship, note tags as a joined string
+rather than <code>[String]</code>, and explicit relationship inverses are omitted.
+<code>docs/VERIFICATION.md</code> records the investigation.</p>
+<p><code>DataServices</code> groups small synchronous services (<code>TaskService</code>,
+<code>ProjectService</code>, <code>NoteService</code>, <code>GraphService</code>, <code>JournalService</code>). Agent tools, views and
+App Intents all write through them, so an agent action shows up in Today,
+Projects and Knowledge immediately, and vice versa.</p>
+<p><code>Store.makeContainer</code> creates Application Support before opening the
+store. If the persistent store cannot be opened (for example, a failed
+migration), it backs up the store files with a timestamped suffix, records
+<code>Store.migrationError</code>, and falls back to an in-memory store instead of
+crashing.</p>
+<p><code>SemanticIndex</code> uses <code>NLEmbedding.sentenceEmbedding(for: .english)</code>,
+caches vectors in <code>EmbeddingRecord</code>, and ranks by cosine similarity in
+memory. That is sized for a personal corpus of thousands of notes; there
+is no approximate-nearest-neighbour index. The embedder is disabled under
+the test host, so tests exercise keyword search only.</p>
+<h2 id="presentation-and-design-system">Presentation and design system</h2>
+<ul>
+<li><strong>RootShell</strong>: the thread is home. A vertical pull scrubs <code>AppModel.zoom</code>;
+  the thread recedes into a glass dock while Today, Projects and Knowledge
+  fan in. One scalar drives every property, so the transition is
+  interruptible and cannot desynchronise.</li>
+<li><strong>Thread</strong>: a custom <code>TextRenderer</code> (<code>CondensationRenderer</code>) reveals each
+  glyph from blurred to sharp as it arrives, timed by <code>ChunkClock</code>; tool
+  activity renders as inline glass cards; thinking is an aurora orb.</li>
+<li><strong>Knowledge</strong>: <code>OrbitalLayout</code> places the focused node at the centre and
+  others on rings by graph distance, animated by <code>GraphSimulation</code>.</li>
+<li><strong>Deep Glass</strong>: <code>LiquidGlass.metal</code> provides three stitchable shaders
+  applied with SwiftUI <code>layerEffect</code>: <code>liquidGlass</code> (rounded-rect SDF
+  refraction, motion-tracked specular, identity tint), <code>aurora</code>
+  (domain-warped noise) and <code>specularSweep</code> (the streaming highlight).
+  <code>GlassSurface</code> falls back to a plain material if shaders are unavailable;
+  Reduce Motion freezes the living surfaces. Token rules live in
+  <code>docs/DESIGN.md</code>.</li>
+</ul>
+<h2 id="testing-and-ci">Testing and CI</h2>
+<ul>
+<li>Swift Testing suites in <code>Tests/</code> (129 tests in 18 suites in v0.3): date
+  parsing (relative to now and to a fixed reference date), <code>ToolBox</code> and
+  the new tools, the tool registry and tool-call parser, planning,
+  argument passing, failure handling and undo, retrieval (chunking, BM25
+  recall@k, citation mapping, incremental index), integrations behind
+  mocks and the widget snapshot, the intent router, orbital layout, the
+  streaming chunk clock, a SwiftData insert-walk regression suite, the
+  router eval, the tool-trimming recall eval, the v0.3 router constructions,
+  and the "ask your notes" eval (61 synthetic questions over 22 synthetic
+  notes: recall@1 and @3, answer-span hit rate, citation faithfulness and
+  span attribution).</li>
+<li>Tests run serialized with a per-suite time limit. Each test keeps its
+  in-memory <code>ModelContainer</code> alive explicitly, because a <code>ModelContext</code>
+  does not retain its container.</li>
+<li>The test host is inert: no Metal, CoreMotion or persistent store.</li>
+<li><code>.github/workflows/ci.yml</code> runs on every pull request and push to <code>main</code>:
+  a Linux hygiene scan, then XcodeGen and <code>xcodebuild test</code> on the newest
+  Xcode on a <code>macos-26</code> runner against an iPhone simulator. The job summary
+  shows the test count and the eval table. A second step re-runs only
+  the RAG eval with the sentence-embedding asset allowed
+  (<code>PB_EMBEDDING_EVAL=1</code>, <code>continue-on-error</code>), so semantic and hybrid
+  retrieval are measured when the runner has the asset and reported as
+  skipped when it does not.</li>
+<li>Every eval prints <code>EVALJSON</code> lines. <code>.github/workflows/pages.yml</code> runs
+  after a successful CI run on <code>main</code>, downloads that run's build logs, and
+  <code>scripts/build_site.py</code> renders the docs site (overview, eval tables,
+  architecture, product brief, verification) to the <code>gh-pages</code> branch. The
+  site never contains a hand-typed number.</li>
+</ul>
+<p>What CI cannot cover: the Foundation Models path (including guided-
+generation planning and grounded answers) needs an Apple Intelligence
+device; the MLX path is not compiled in CI; EventKit permission flows,
+Siri phrases and the widget on a home screen need a manual run. CI does
+build and embed the widget extension. Manual checks are listed in
+<code>docs/VERIFICATION.md</code>.</p>
+  </article>
+</div>
+
+</main>
+<footer class="wrap footer">
+  <p>PocketBrains 0.3.0 &middot; Sean McRae &middot; <a href="https://github.com/seanmcrae/pocketbrains-app">Source on GitHub</a>.
+  No license has been chosen yet; the code is published for review.
+  Every number on this site is parsed from a CI build log of the iOS test suite on the bundled
+  synthetic corpora (<a href="https://github.com/seanmcrae/pocketbrains-app/actions/runs/37745540170">run 37745540170</a>).</p>
+</footer>
+<script type="module">
+  // Diagrams render when the CDN is reachable; otherwise their source stays readable.
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+</script>
+</body>
+</html>
