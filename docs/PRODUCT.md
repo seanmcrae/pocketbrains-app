@@ -227,6 +227,56 @@ a routing regression fails the build. Paraphrase results are reported but
 not gated, because improving them with more rules would overfit the
 corpus; that is what the language-model tiers are for.
 
+## Minimum viable quality
+
+Thresholds for a first TestFlight build, using the metrics above and
+consistent with the v1 targets. "Current" is CI run 37723402205,
+deterministic brain only. Foundation Models rows cannot be scored until
+issue #5 lands, so no v1 build ships before they are.
+
+| Gate | Do not ship | Ship | Delight | Current |
+|---|---|---|---|---|
+| Canonical + compound phrasing, end-to-end (71) | below 100% (CI gate) | 100% | 100% | 100% |
+| Held-out paraphrases, end-to-end, best available brain | below 60% | 75% or more | 90% or more (the Foundation Models v1 target) | 39.6% deterministic floor only; model tiers unmeasured (#5) |
+| Held-out paraphrases, end-to-end, deterministic floor | below 30.2% (the pre-v0.3 baseline) | 39.6% or more (no regression) | 50% or more | 39.6% |
+| Tool trimming recall@8, held-out (before the switch defaults on) | below 90% | 95% or more | 98% or more | 90.6% (switch stays off) |
+| Ask-your-notes recall@3 (61 questions) | below 90% (CI gate) | 90% or more | 97% or more | 96.7% (BM25) |
+| Citation faithfulness, extractive answers | below 100% (CI gate) | 100% | 100% | 100% |
+| Citation faithfulness, model-written answers | any unsupported citation in the hand-labelled set | 95% or more | 100% | not measured (#7) |
+| Routing + execution latency p95, CI simulator | 50 ms or more | under 50 ms | under 20 ms | 21.74 ms (47.13 ms on main run 37727772426; #15) |
+| Time to first token, Foundation Models | over 2 s | under 1 s | under 0.5 s | not measured (#5) |
+| Network requests made by the app | any | zero | zero, verified with a proxy each release | zero by construction |
+
+The "Do not ship" line for the held-out split protects the measure: it
+fails only if a change makes the floor worse than before v0.3, not if
+the number stops rising. "Ship" on the best available brain is the gap
+the model tiers have to close.
+
+## Cost at 1x and 10x usage
+
+Estimates. They use only this repository's own assumptions: inference
+runs on the user's device, there is no backend, no account system and no
+per-request API (see "Local versus cloud"), CI runs on GitHub-hosted
+runners, and App Store distribution needs an Apple Developer Program
+membership ($99 a year, `docs/LAUNCH.md`). "1x" is a first TestFlight
+cohort; "10x" is ten times the users and requests. The repository makes
+no assumption about absolute user counts, so none is invented here.
+
+| Cost line | 1x | 10x | Scales with usage? |
+|---|---|---|---|
+| Inference (per request) | $0: on device | $0: on device | No |
+| Backend, storage, bandwidth | $0: none exists | $0 | No |
+| Apple Developer Program | $99 a year | $99 a year | No |
+| CI | GitHub-hosted runners for the public repository | same | No: scales with commits, not users |
+| Per-user device cost | battery and thermals per request (unmeasured); opt-in MLX build adds a ~2.3 GB one-time model download | same per user | Per user, borne by the user's device |
+
+The cost a cloud assistant would scale with engagement (tokens per
+request times requests) is zero here at any usage level. What grows
+with usage is support and App Store review work, which the repository
+does not estimate, and the on-device cost each user carries, which
+issue #5's device runs should measure (time to first token, and ideally
+energy per request).
+
 ## Local versus cloud: trade-offs
 
 | Dimension | On-device (chosen) | Cloud LLM |
