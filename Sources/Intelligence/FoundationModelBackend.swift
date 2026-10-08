@@ -48,7 +48,10 @@ final class FoundationModelBackend: ModelBackend {
                         return
                     }
                     var lastText = ""
-                    let stream = session.streamResponse(to: prompt)
+                    // Optional per-request tool trimming (Settings): a fresh
+                    // session that sees only the tools relevant to this prompt.
+                    let active = ToolTrimming.isEnabled ? self.trimmedSession(for: prompt) : session
+                    let stream = active.streamResponse(to: prompt)
                     for try await partial in stream {
                         lastText = partial.content
                         continuation.yield(.text(lastText))
@@ -64,6 +67,18 @@ final class FoundationModelBackend: ModelBackend {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    // MARK: - Tool trimming
+
+    /// A one-request session offering only `ToolSelector`'s pick (about 8
+    /// of 22 to 24 tools, core tools always included). Trades multi-turn
+    /// memory for a much smaller tool schema in the ~3B model's context.
+    private func trimmedSession(for prompt: String) -> LanguageModelSession {
+        let all = Self.tools(toolbox: toolbox, sink: sink)
+        let keep = Set(ToolSelector.select(prompt, available: all.map { $0.name }).tools)
+        return LanguageModelSession(tools: all.filter { keep.contains($0.name) },
+                                    instructions: AgentVoice.instructions())
     }
 
     // MARK: - Planning

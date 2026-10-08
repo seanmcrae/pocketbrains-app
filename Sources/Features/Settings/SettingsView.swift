@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @AppStorage("pb.brain") private var brainRaw = BrainPreference.auto.rawValue
+    @AppStorage(ToolTrimming.defaultsKey) private var trimTools = false
 
     @State private var confirmClearChat = false
     @State private var confirmErase = false
@@ -110,6 +111,20 @@ struct SettingsView: View {
                 }
                 .buttonStyle(GlassPressStyle(scale: 0.99))
             }
+
+            Toggle(isOn: $trimTools) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Focused tool list")
+                        .font(Type.bodyMedium)
+                        .foregroundStyle(Paper.primary)
+                    Text("Apple Intelligence sees only the tools that fit each request, about 8 instead of all 22. Each request starts a fresh model session. Experimental.")
+                        .font(Type.caption)
+                        .foregroundStyle(Paper.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(lumen)
+            .padding(.top, Space.xs)
         }
     }
 
