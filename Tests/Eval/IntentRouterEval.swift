@@ -287,4 +287,45 @@ struct IntentRouterEval {
             print("EVAL \(origin == .v2 ? "v0.2" : "v0.3") held-out misses: \(misses) (not itemized, by design)")
         }
     }
+    /// Recall@k of `ToolSelector`: the share of cases whose expected tool
+    /// (every step, for compound requests) is inside the trimmed set the
+    /// Foundation Models brain would be offered. All 24 tools available
+    /// (integrations on, as in the eval fixture). This measures the trim,
+    /// not the model: it says nothing about which tool the model then picks.
+    /// The selector reuses the deterministic grammar, so canonical splits
+    /// are not independent; the held-out splits are the meaningful rows.
+    @Test func toolTrimmingRecall() {
+        let container = Store.makeContainer(inMemory: true)
+        defer { withExtendedLifetime(container) {} }
+        let box = ToolBox(services: DataServices(context: container.mainContext),
+                          semanticIndex: SemanticIndex(context: container.mainContext))
+        let available = AgentToolRegistry.all(toolbox: box).map(\.name)
+
+        func covered(_ testCase: IntentEvalCase, k: Int) -> Bool {
+            let selected = Set(ToolSelector.select(testCase.utterance, available: available, limit: k).tools)
+            return Set(testCase.steps ?? [testCase.tool]).isSubset(of: selected)
+        }
+        print("EVAL Tool trimming recall@k (expected tool inside the trimmed set; \(available.count) tools available)")
+        let groups: [(label: String, contains: (IntentEvalCase) -> Bool)] =
+            Self.splits + [(label: "overall", contains: { _ in true })]
+        for k in [6, 8] {
+            for (label, contains) in groups {
+                let subset = IntentEvalCorpus.cases.filter(contains)
+                let hits = subset.filter { covered($0, k: k) }.count
+                print("EVAL trim recall@\(k) " + label + ": " + Self.percent(hits, subset.count) + " (n=\(subset.count))")
+                print(Self.json([("suite", "trim"), ("k", k), ("split", label), ("n", subset.count),
+                                 ("recall", Double(hits) / Double(max(subset.count, 1)))]))
+            }
+        }
+        // Dev misses at the default k may be itemized; held-out ones are not.
+        for testCase in IntentEvalCorpus.cases
+        where testCase.category != .heldout && !covered(testCase, k: ToolSelector.defaultLimit) {
+            print("EVAL trim miss [\(testCase.origin.rawValue) \(testCase.category.rawValue)] \(testCase.steps?.joined(separator: "+") ?? testCase.tool): \"\(testCase.utterance)\"")
+        }
+        let average = Double(IntentEvalCorpus.cases.map {
+            ToolSelector.select($0.utterance, available: available).tools.count
+        }.reduce(0, +)) / Double(IntentEvalCorpus.cases.count)
+        print(String(format: "EVAL trim average tools offered at k=%ld: %.1f of %ld", ToolSelector.defaultLimit, average, available.count))
+    }
 }
+
