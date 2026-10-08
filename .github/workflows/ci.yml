@@ -1,9 +1,14 @@
 name: CI
 
+# Runs on every push to main, every pull request targeting main (including
+# Dependabot's), and on demand. No paths filters: docs-only changes still
+# run the hygiene scan, and the iOS job is the only source of eval numbers.
 on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -68,7 +73,7 @@ jobs:
             echo
             echo "### Intent-router eval"
             echo '```'
-            grep -E '^EVAL' build.log | sed 's/^EVAL //' || echo "Eval output not found."
+            grep -E '^EVAL ' build.log | sed 's/^EVAL //' || echo "Eval output not found."
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
