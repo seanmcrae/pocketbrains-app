@@ -13,9 +13,12 @@ final class SemanticIndex {
     /// to destabilize asset-less CI simulators, so it never runs during test
     /// hosting and otherwise happens on first use, off the launch path.
     private var embedderStorage: NLEmbedding??
+    /// Set only by the embedding eval, which runs in its own CI step so an
+    /// asset problem cannot take the main test run down with it.
+    private let allowUnderTests: Bool
     private var embedder: NLEmbedding? {
         if let cached = embedderStorage { return cached }
-        guard NSClassFromString("XCTestCase") == nil else {
+        guard allowUnderTests || NSClassFromString("XCTestCase") == nil else {
             embedderStorage = NLEmbedding?.none
             return nil
         }
@@ -24,8 +27,9 @@ final class SemanticIndex {
         return created
     }
 
-    init(context: ModelContext) {
+    init(context: ModelContext, allowUnderTests: Bool = false) {
         self.context = context
+        self.allowUnderTests = allowUnderTests
     }
 
     var isAvailable: Bool { embedder != nil }
